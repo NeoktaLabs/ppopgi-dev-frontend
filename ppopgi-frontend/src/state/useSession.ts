@@ -1,16 +1,23 @@
-// src/state/useSession.ts  (update your store to remember connector type + wc provider for proper disconnect)
 import { create } from "zustand";
 import type { BrowserProvider, JsonRpcSigner } from "ethers";
 
-type Connector = "injected" | "walletconnect" | null;
+type Connector = "injected" | "walletconnect" | "metamask_injected" | "metamask_qr" | null;
 
 type SessionState = {
   provider: BrowserProvider | null;
   signer: JsonRpcSigner | null;
   account: string | null;
   chainId: number | null;
+
   connector: Connector;
-  wcProvider: any | null; // WalletConnect EthereumProvider (only set when using QR)
+
+  // existing WalletConnect
+  wcProvider: any | null;
+
+  // MetaMask SDK (QR/deeplink) session handles
+  mmSdk: any | null;
+  mmEip1193: any | null;
+
   set: (s: Partial<SessionState>) => void;
   clear: () => void;
 };
@@ -20,17 +27,30 @@ export const useSession = create<SessionState>((set, get) => ({
   signer: null,
   account: null,
   chainId: null,
+
   connector: null,
+
   wcProvider: null,
+
+  mmSdk: null,
+  mmEip1193: null,
+
   set: (s) => set(s),
+
   clear: () => {
-    const wc = get().wcProvider;
-    // For QR sign-in, disconnect the session explicitly (no surprises)
+    // WalletConnect disconnect
     try {
-      wc?.disconnect?.();
-    } catch {
-      // ignore
-    }
+      get().wcProvider?.disconnect?.();
+    } catch {}
+
+    // MetaMask SDK disconnect (best effort)
+    try {
+      get().mmEip1193?.disconnect?.();
+    } catch {}
+    try {
+      get().mmSdk?.disconnect?.();
+    } catch {}
+
     set({
       provider: null,
       signer: null,
@@ -38,6 +58,8 @@ export const useSession = create<SessionState>((set, get) => ({
       chainId: null,
       connector: null,
       wcProvider: null,
+      mmSdk: null,
+      mmEip1193: null,
     });
   },
 }));
