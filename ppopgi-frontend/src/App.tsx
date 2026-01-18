@@ -1,35 +1,58 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useSession } from "./state/useSession";
+import { ensureEtherlink, signIn } from "./wallet/injected";
+import { ETHERLINK_MAINNET } from "./chain/etherlink";
 
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+function short(a: string) {
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
-export default App
+export default function App() {
+  const { account, chainId, set, clear } = useSession();
+
+  const wrongPlace = account && chainId !== ETHERLINK_MAINNET.chainId;
+
+  return (
+    <div style={{ padding: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <b>Ppopgi</b>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button>Explore</button>
+          <button>Create</button>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button>Cashier</button>
+
+          {!account ? (
+            <button
+              onClick={async () => {
+                try {
+                  await ensureEtherlink();
+                  const s = await signIn();
+                  set(s);
+                } catch (e: any) {
+                  if (e?.message === "NO_WALLET") alert("Please install a wallet to sign in.");
+                  else alert("Could not sign in. Please try again.");
+                }
+              }}
+            >
+              Sign in
+            </button>
+          ) : (
+            <>
+              <span>Your account: {short(account)}</span>
+              <button onClick={clear}>Sign out</button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {wrongPlace && (
+        <div style={{ marginTop: 16, padding: 12, border: "1px solid #ccc", borderRadius: 10 }}>
+          This raffle booth runs on Etherlink. Please switch “where you play” to continue.
+        </div>
+      )}
+    </div>
+  );
+}
