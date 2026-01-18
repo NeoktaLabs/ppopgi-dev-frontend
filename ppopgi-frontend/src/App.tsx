@@ -1,5 +1,7 @@
+// src/App.tsx  (example usage)
+import React, { useState } from "react";
 import { useSession } from "./state/useSession";
-import { ensureEtherlink, signIn } from "./wallet/injected";
+import { SignInModal } from "./components/SignInModal";
 import { ETHERLINK_MAINNET } from "./chain/etherlink";
 
 function short(a: string) {
@@ -7,7 +9,8 @@ function short(a: string) {
 }
 
 export default function App() {
-  const { account, chainId, set, clear } = useSession();
+  const { account, chainId, clear } = useSession();
+  const [open, setOpen] = useState(false);
 
   const wrongPlace = account && chainId !== ETHERLINK_MAINNET.chainId;
 
@@ -25,20 +28,7 @@ export default function App() {
           <button>Cashier</button>
 
           {!account ? (
-            <button
-              onClick={async () => {
-                try {
-                  await ensureEtherlink();
-                  const s = await signIn();
-                  set(s);
-                } catch (e: any) {
-                  if (e?.message === "NO_WALLET") alert("Please install a wallet to sign in.");
-                  else alert("Could not sign in. Please try again.");
-                }
-              }}
-            >
-              Sign in
-            </button>
+            <button onClick={() => setOpen(true)}>Sign in</button>
           ) : (
             <>
               <span>Your account: {short(account)}</span>
@@ -53,6 +43,8 @@ export default function App() {
           This raffle booth runs on Etherlink. Please switch “where you play” to continue.
         </div>
       )}
+
+      <SignInModal open={open} onClose={() => setOpen(false)} />
     </div>
   );
 }
