@@ -1,10 +1,9 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
+import LotteryRegistryAbi from "./abis/LotteryRegistry.json";
+import SingleWinnerDeployerAbi from "./abis/SingleWinnerDeployer.json";
+import LotterySingleWinnerAbi from "./abis/LotterySingleWinner.json";
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+export const ABIS = {
+  LotteryRegistry: LotteryRegistryAbi,
+  SingleWinnerDeployer: SingleWinnerDeployerAbi,
+  LotterySingleWinner: LotterySingleWinnerAbi,
+} as const;
