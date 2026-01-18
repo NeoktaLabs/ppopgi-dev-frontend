@@ -1,7 +1,7 @@
 // src/components/SignInModal.tsx
 import React, { useMemo, useState } from "react";
 import { connectInjected, connectWalletConnect } from "../wallet/connect";
-import { connectMetaMaskInjected, connectMetaMaskSdk } from "../wallet/metamask";
+import { connectMetaMaskInjected } from "../wallet/metamask";
 import { useSession } from "../state/useSession";
 import { ETHERLINK_MAINNET } from "../chain/etherlink";
 
@@ -34,6 +34,8 @@ export function SignInModal({ open, onClose }: Props) {
   const browserAvailable = useMemo(() => hasBrowserSignIn(), []);
   const metaMaskHint = useMemo(() => hasMetaMaskHint(), []);
 
+  const metaMaskWalletId = (import.meta.env.VITE_MM_WC_WALLET_ID as string | undefined) || undefined;
+
   if (!open) return null;
 
   async function doMetaMask() {
@@ -50,8 +52,6 @@ export function SignInModal({ open, onClose }: Props) {
           chainId: s.chainId,
           connector: "metamask_injected",
           wcProvider: null,
-          mmSdk: null,
-          mmEip1193: null,
         });
         onClose();
         return;
@@ -59,21 +59,28 @@ export function SignInModal({ open, onClose }: Props) {
         if (e?.message !== "NO_METAMASK_INJECTED") throw e;
       }
 
-      // 2) Fallback: MetaMask-only QR / deeplink (great for Safari)
-      const s2 = await connectMetaMaskSdk();
+      // 2) Fallback: WalletConnect (all wallets) but recommend MetaMask if we have an id
+      const s2 = await connectWalletConnect({
+        recommendedWalletIds: metaMaskWalletId ? [metaMaskWalletId] : undefined,
+      });
+
       setSession({
         provider: s2.provider,
         signer: s2.signer,
         account: s2.account,
         chainId: s2.chainId,
-        connector: "metamask_qr",
-        wcProvider: null,
-        mmSdk: s2.mmSdk,
-        mmEip1193: s2.mmEip1193,
+        connector: "walletconnect",
+        wcProvider: s2.wcProvider,
       });
       onClose();
-    } catch {
-      setMessage("Could not sign in with MetaMask. Please try again.");
+    } catch (e: any) {
+      if (e?.message === "MISSING_WC_PROJECT_ID") {
+        setMessage("Setup needed: missing QR sign-in key (project id).");
+      } else if (e?.message === "WC_CONNECT_REJECTED") {
+        setMessage("Sign in was canceled.");
+      } else {
+        setMessage("Could not sign in. Please try again.");
+      }
     } finally {
       setBusy(null);
     }
@@ -91,8 +98,6 @@ export function SignInModal({ open, onClose }: Props) {
         chainId: s.chainId,
         connector: "injected",
         wcProvider: null,
-        mmSdk: null,
-        mmEip1193: null,
       });
       onClose();
     } catch (e: any) {
@@ -118,8 +123,6 @@ export function SignInModal({ open, onClose }: Props) {
         chainId: s.chainId,
         connector: "walletconnect",
         wcProvider: s.wcProvider,
-        mmSdk: null,
-        mmEip1193: null,
       });
       onClose();
     } catch (e: any) {
@@ -248,7 +251,7 @@ export function SignInModal({ open, onClose }: Props) {
             <div style={small}>
               {metaMaskHint
                 ? "Use MetaMask in this browser."
-                : "Open MetaMask on your phone if needed."}
+                : "If MetaMask isn’t in this browser, you can still use it from your phone."}
             </div>
           </button>
 
