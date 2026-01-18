@@ -1,18 +1,25 @@
-// src/App.tsx  (example usage)
+// src/App.tsx
 import React, { useState } from "react";
 import { useSession } from "./state/useSession";
 import { SignInModal } from "./components/SignInModal";
 import { ETHERLINK_MAINNET } from "./chain/etherlink";
+import { useAutoRestoreSession } from "./wallet/useAutoRestoreSession";
 
 function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
 export default function App() {
-  const { account, chainId, clear } = useSession();
+  // ✅ restores previous sign-in after refresh (best effort)
+  useAutoRestoreSession();
+
+  const account = useSession((s) => s.account);
+  const chainId = useSession((s) => s.chainId);
+  const clear = useSession((s) => s.clear);
+
   const [open, setOpen] = useState(false);
 
-  const wrongPlace = account && chainId !== ETHERLINK_MAINNET.chainId;
+  const wrongPlace = !!account && chainId !== ETHERLINK_MAINNET.chainId;
 
   return (
     <div style={{ padding: 20 }}>
@@ -40,7 +47,8 @@ export default function App() {
 
       {wrongPlace && (
         <div style={{ marginTop: 16, padding: 12, border: "1px solid #ccc", borderRadius: 10 }}>
-          This raffle booth runs on Etherlink. Please switch “where you play” to continue.
+          This raffle booth runs on <b>{ETHERLINK_MAINNET.chainName}</b>. Please switch “where you
+          play” to continue.
         </div>
       )}
 
