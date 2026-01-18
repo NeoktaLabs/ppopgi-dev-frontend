@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useSession } from "./state/useSession";
 import { SignInModal } from "./components/SignInModal";
 import { DisclaimerGate } from "./components/DisclaimerGate";
-import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
+import { CreateRaffleModal } from "./components/CreateRaffleModal";
 import { ETHERLINK_MAINNET } from "./chain/etherlink";
 import { useAutoRestoreSession } from "./wallet/useAutoRestoreSession";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
@@ -29,9 +29,8 @@ export default function App() {
   const [signInOpen, setSignInOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
 
-  // raffle details modal state
-  const [raffleOpen, setRaffleOpen] = useState(false);
-  const [selectedRaffleId, setSelectedRaffleId] = useState<string | null>(null);
+  // Create modal state
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     setGateOpen(!hasAcceptedDisclaimer());
@@ -46,16 +45,6 @@ export default function App() {
 
   const { bigPrizes, endingSoon, note } = useHomeRaffles();
 
-  function openRaffle(id: string) {
-    setSelectedRaffleId(id);
-    setRaffleOpen(true);
-  }
-
-  function closeRaffle() {
-    setRaffleOpen(false);
-    // keep selectedRaffleId so re-open is instant if you want
-  }
-
   return (
     <div style={{ padding: 20 }}>
       <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
@@ -66,7 +55,7 @@ export default function App() {
 
         <div style={{ display: "flex", gap: 10 }}>
           <button>Explore</button>
-          <button>Create</button>
+          <button onClick={() => setCreateOpen(true)}>Create</button>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -98,38 +87,25 @@ export default function App() {
         </div>
       )}
 
-      {/* Home sections */}
+      {/* Home sections (still read-only placeholders) */}
       <div style={{ marginTop: 18 }}>
         <h3 style={{ margin: 0 }}>Big prizes right now</h3>
         <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
           {bigPrizes.map((r) => (
-            <div
-              key={r.id}
-              style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12, cursor: "pointer" }}
-              role="button"
-              tabIndex={0}
-              onClick={() => openRaffle(r.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") openRaffle(r.id);
-              }}
-            >
+            <div key={r.id} style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
               <div style={{ fontWeight: 700 }}>{r.name}</div>
-
               <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
                 Win: {r.winningPot} USDC • Ticket: {r.ticketPrice} USDC
               </div>
-
               <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
                 Joined: {r.sold}
                 {r.maxTickets !== "0" ? ` • Max: ${r.maxTickets}` : ""}
               </div>
-
               <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
                 Ppopgi fee: {r.protocolFeePercent}%
               </div>
             </div>
           ))}
-
           {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
         </div>
       </div>
@@ -138,40 +114,23 @@ export default function App() {
         <h3 style={{ margin: 0 }}>Ending soon</h3>
         <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
           {endingSoon.map((r) => (
-            <div
-              key={r.id}
-              style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12, cursor: "pointer" }}
-              role="button"
-              tabIndex={0}
-              onClick={() => openRaffle(r.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") openRaffle(r.id);
-              }}
-            >
+            <div key={r.id} style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
               <div style={{ fontWeight: 700 }}>{r.name}</div>
-
               <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
                 Ticket: {r.ticketPrice} USDC
               </div>
-
               <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
                 Ends at: {formatDeadline(r.deadline)}
               </div>
             </div>
           ))}
-
           {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
         </div>
       </div>
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
-
-      <RaffleDetailsModal
-        open={raffleOpen}
-        raffleId={selectedRaffleId}
-        onClose={closeRaffle}
-      />
+      <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
 }
