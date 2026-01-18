@@ -1,3 +1,4 @@
+// src/wallet/connect.ts
 import { BrowserProvider } from "ethers";
 import EthereumProvider from "@walletconnect/ethereum-provider";
 import { ETHERLINK_MAINNET } from "../chain/etherlink";
@@ -30,7 +31,6 @@ export async function connectWalletConnect() {
 
   const wc = await EthereumProvider.init({
     projectId,
-    // Reown/WalletConnect recommend optionalChains to avoid blocking wallets.  [oai_citation:4‡docs.reown.com](https://docs.reown.com/advanced/providers/ethereum?utm_source=chatgpt.com)
     optionalChains: [ETHERLINK_MAINNET.chainId],
     showQrModal: true,
     metadata: {
@@ -41,12 +41,16 @@ export async function connectWalletConnect() {
     },
   });
 
-  await wc.connect();
+  try {
+    await wc.connect();
+  } catch {
+    throw new Error("WC_CONNECT_REJECTED");
+  }
 
   const provider = new BrowserProvider(wc as any);
   const signer = await provider.getSigner();
   const account = await signer.getAddress();
   const network = await provider.getNetwork();
 
-  return { provider, signer, account, chainId: Number(network.chainId), wc };
+  return { provider, signer, account, chainId: Number(network.chainId), wcProvider: wc };
 }
