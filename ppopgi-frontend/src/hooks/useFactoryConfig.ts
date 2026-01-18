@@ -43,7 +43,7 @@ export function useFactoryConfig(open: boolean) {
         const rpcUrl = mustEnv("VITE_ETHERLINK_RPC_URL");
         const rpc = new JsonRpcProvider(rpcUrl);
 
-        const d = new Contract(CONTRACTS.SingleWinnerDeployer, SingleWinnerDeployerAbi, rpc);
+        const d = new Contract(ADDRESSES.SingleWinnerDeployer, SingleWinnerDeployerAbi, rpc);
 
         const [usdc, entropy, entropyProvider, feeRecipient, protocolFeePercent] =
           await Promise.all([
