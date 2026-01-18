@@ -5,6 +5,8 @@ import { ETHERLINK_MAINNET } from "../chain/etherlink";
 
 type Eip1193Provider = {
   request: (args: { method: string; params?: any }) => Promise<any>;
+  on?: (event: string, cb: (...args: any[]) => void) => void;
+  removeListener?: (event: string, cb: (...args: any[]) => void) => void;
 };
 
 function getInjected(): Eip1193Provider | null {
@@ -67,13 +69,6 @@ async function ensureEtherlink(eip1193: any) {
 
 function waitForChain(eip1193: any, targetChainId: number, ms = 6000) {
   return new Promise<void>((resolve, reject) => {
-    const cleanup = () => {
-      try {
-        eip1193.removeListener?.("chainChanged", onChain);
-      } catch {}
-      clearTimeout(t);
-    };
-
     const onChain = (hexId: string) => {
       const id = Number.parseInt(hexId, 16);
       if (id === targetChainId) {
@@ -82,12 +77,18 @@ function waitForChain(eip1193: any, targetChainId: number, ms = 6000) {
       }
     };
 
+    const cleanup = () => {
+      try {
+        eip1193.removeListener?.("chainChanged", onChain);
+      } catch {}
+      clearTimeout(t);
+    };
+
     const t = setTimeout(() => {
       cleanup();
       reject(new Error("CHAIN_SWITCH_TIMEOUT"));
     }, ms);
 
-    // If already correct, resolve immediately; otherwise listen
     eip1193
       .request({ method: "eth_chainId" })
       .then((hexId: string) => {
@@ -107,7 +108,6 @@ function waitForChain(eip1193: any, targetChainId: number, ms = 6000) {
 
 type ConnectWcOpts = {
   showQrModal?: boolean; // true for user-initiated QR, false for silent restore
-  recommendedWalletIds?: string[];
 };
 
 export async function connectWalletConnect(opts?: ConnectWcOpts) {
@@ -120,49 +120,42 @@ export async function connectWalletConnect(opts?: ConnectWcOpts) {
   const showQrModal = opts?.showQrModal ?? true;
 
   const wc = await EthereumProvider.init({
-  projectId,
+    projectId,
 
-  // ✅ IMPORTANT: use optionalChains (recommended)
-  // Do NOT use `chains:` here (it makes Etherlink required and some wallets reject)
-  optionalChains: [ETHERLINK_MAINNET.chainId],
+    // ✅ Use optionalChains (better compatibility; avoids "required namespace" rejections)
+    optionalChains: [ETHERLINK_MAINNET.chainId],
 
-  // ✅ Include methods we will call (switch/add)
-  optionalMethods: [
-    "eth_requestAccounts",
-    "eth_accounts",
-    "eth_chainId",
-    "wallet_switchEthereumChain",
-    "wallet_addEthereumChain",
-    "eth_sendTransaction",
-    "personal_sign",
-    "eth_signTypedData",
-    "eth_signTypedData_v4",
-  ],
+    // ✅ Include methods we will call (switch/add + normal signing)
+    optionalMethods: [
+      "eth_requestAccounts",
+      "eth_accounts",
+      "eth_chainId",
+      "wallet_switchEthereumChain",
+      "wallet_addEthereumChain",
+      "eth_sendTransaction",
+      "personal_sign",
+      "eth_signTypedData",
+      "eth_signTypedData_v4",
+    ],
 
-  rpcMap: {
-    [ETHERLINK_MAINNET.chainId]: rpcUrl,
-  },
+    rpcMap: {
+      [ETHERLINK_MAINNET.chainId]: rpcUrl,
+    },
 
-  showQrModal,
+    showQrModal,
 
-  ...(opts?.recommendedWalletIds
-    ? { qrModalOptions: { recommendedWalletIds: opts.recommendedWalletIds } }
-    : {}),
+    metadata: {
+      name: "Ppopgi",
+      description: "Ppopgi raffle booth on Etherlink",
+      url: window.location.origin,
+      icons: [],
+    },
+  });
 
-  metadata: {
-    name: "Ppopgi",
-    description: "Ppopgi raffle booth on Etherlink",
-    url: window.location.origin,
-    icons: [],
-  },
-});
-
-  // ✅ IMPORTANT:
-  // - If showQrModal=true, this opens the QR modal if needed.
-  // - If showQrModal=false, this will only succeed if there is an existing session.
   try {
     await wc.connect();
   } catch (e) {
+    // Silent restore should not show QR or fail loudly
     if (!showQrModal) throw new Error("WC_NO_SESSION");
     throw new Error("WC_CONNECT_REJECTED");
   }
