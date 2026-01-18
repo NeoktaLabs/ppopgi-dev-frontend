@@ -4,20 +4,19 @@ import { useSession } from "../state/useSession";
 import { connectInjected, connectWalletConnect } from "./connect";
 import { connectMetaMaskInjected } from "./metamask";
 
-/**
- * Restores a previous sign-in on refresh (best effort).
- * If restore fails, we clear the session and the user can sign in again.
- */
+let started = false;
+
 export function useAutoRestoreSession() {
   useEffect(() => {
-    const s = useSession.getState();
+    if (started) return;
+    started = true;
 
+    const s = useSession.getState();
     if (!s.connector) return;
 
     (async () => {
       try {
         if (s.connector === "metamask_injected") {
-          // MetaMask injected only
           const r = await connectMetaMaskInjected();
           useSession.getState().set({
             provider: r.provider,
@@ -44,7 +43,8 @@ export function useAutoRestoreSession() {
         }
 
         if (s.connector === "walletconnect") {
-          const r = await connectWalletConnect();
+          // ✅ Silent restore: do NOT show QR on refresh
+          const r = await connectWalletConnect({ showQrModal: false });
           useSession.getState().set({
             provider: r.provider,
             signer: r.signer,
@@ -56,6 +56,7 @@ export function useAutoRestoreSession() {
           return;
         }
       } catch {
+        // If restore fails, clear local session so we don’t loop
         useSession.getState().clear();
       }
     })();
