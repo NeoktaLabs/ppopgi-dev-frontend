@@ -1,6 +1,7 @@
 // src/components/SignInModal.tsx
 import React, { useMemo, useState } from "react";
 import { connectInjected, connectWalletConnect } from "../wallet/connect";
+import { connectMetaMaskInjected, connectMetaMaskSdk } from "../wallet/metamask";
 import { useSession } from "../state/useSession";
 import { ETHERLINK_MAINNET } from "../chain/etherlink";
 
@@ -13,18 +14,70 @@ function hasBrowserSignIn(): boolean {
   return typeof (window as any).ethereum !== "undefined";
 }
 
-function shortAccount(a: string) {
-  return `${a.slice(0, 6)}…${a.slice(-4)}`;
+function hasMetaMaskHint(): boolean {
+  const eth = (window as any).ethereum;
+  if (!eth) return false;
+
+  if (eth.isMetaMask) return true;
+
+  if (Array.isArray(eth.providers)) {
+    return eth.providers.some((p: any) => p?.isMetaMask);
+  }
+  return false;
 }
 
 export function SignInModal({ open, onClose }: Props) {
   const setSession = useSession((s) => s.set);
-  const [busy, setBusy] = useState<null | "browser" | "qr">(null);
+  const [busy, setBusy] = useState<null | "browser" | "qr" | "metamask">(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const browserAvailable = useMemo(() => hasBrowserSignIn(), []);
+  const metaMaskHint = useMemo(() => hasMetaMaskHint(), []);
 
   if (!open) return null;
+
+  async function doMetaMask() {
+    setMessage(null);
+    setBusy("metamask");
+    try {
+      // 1) Prefer injected MetaMask (extension / MetaMask in-app browser)
+      try {
+        const s = await connectMetaMaskInjected();
+        setSession({
+          provider: s.provider,
+          signer: s.signer,
+          account: s.account,
+          chainId: s.chainId,
+          connector: "metamask_injected",
+          wcProvider: null,
+          mmSdk: null,
+          mmEip1193: null,
+        });
+        onClose();
+        return;
+      } catch (e: any) {
+        if (e?.message !== "NO_METAMASK_INJECTED") throw e;
+      }
+
+      // 2) Fallback: MetaMask-only QR / deeplink (great for Safari)
+      const s2 = await connectMetaMaskSdk();
+      setSession({
+        provider: s2.provider,
+        signer: s2.signer,
+        account: s2.account,
+        chainId: s2.chainId,
+        connector: "metamask_qr",
+        wcProvider: null,
+        mmSdk: s2.mmSdk,
+        mmEip1193: s2.mmEip1193,
+      });
+      onClose();
+    } catch {
+      setMessage("Could not sign in with MetaMask. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function doBrowser() {
     setMessage(null);
@@ -38,6 +91,8 @@ export function SignInModal({ open, onClose }: Props) {
         chainId: s.chainId,
         connector: "injected",
         wcProvider: null,
+        mmSdk: null,
+        mmEip1193: null,
       });
       onClose();
     } catch (e: any) {
@@ -63,6 +118,8 @@ export function SignInModal({ open, onClose }: Props) {
         chainId: s.chainId,
         connector: "walletconnect",
         wcProvider: s.wcProvider,
+        mmSdk: null,
+        mmEip1193: null,
       });
       onClose();
     } catch (e: any) {
@@ -158,7 +215,9 @@ export function SignInModal({ open, onClose }: Props) {
   };
 
   const busyText =
-    busy === "browser"
+    busy === "metamask"
+      ? "Opening MetaMask sign in…"
+      : busy === "browser"
       ? "Signing in…"
       : busy === "qr"
       ? "Opening QR sign in…"
@@ -179,6 +238,20 @@ export function SignInModal({ open, onClose }: Props) {
         </p>
 
         <div style={buttonRow}>
+          <button
+            style={!busy ? btn : btnDisabled}
+            disabled={!!busy}
+            onClick={doMetaMask}
+            aria-label="Sign in with MetaMask"
+          >
+            <div style={{ fontWeight: 700 }}>MetaMask</div>
+            <div style={small}>
+              {metaMaskHint
+                ? "Use MetaMask in this browser."
+                : "Open MetaMask on your phone if needed."}
+            </div>
+          </button>
+
           <button
             style={browserAvailable && !busy ? btn : btnDisabled}
             disabled={!browserAvailable || !!busy}
@@ -201,9 +274,7 @@ export function SignInModal({ open, onClose }: Props) {
           </div>
         )}
 
-        <div style={note}>
-          Nothing happens automatically. You always confirm actions yourself.
-        </div>
+        <div style={note}>Nothing happens automatically. You always confirm actions yourself.</div>
       </div>
     </div>
   );
