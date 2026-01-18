@@ -25,7 +25,7 @@ export async function connectInjected() {
   return { provider, signer, account, chainId: Number(network.chainId) };
 }
 
-export async function connectWalletConnect() {
+export async function connectWalletConnect(opts?: { recommendedWalletIds?: string[] }) {
   const projectId = import.meta.env.VITE_WC_PROJECT_ID as string;
   if (!projectId) throw new Error("MISSING_WC_PROJECT_ID");
 
@@ -39,6 +39,12 @@ export async function connectWalletConnect() {
       url: window.location.origin,
       icons: [],
     },
+    qrModalOptions:
+      opts?.recommendedWalletIds && opts.recommendedWalletIds.length > 0
+        ? {
+            explorerRecommendedWalletIds: opts.recommendedWalletIds,
+          }
+        : undefined,
   });
 
   try {
