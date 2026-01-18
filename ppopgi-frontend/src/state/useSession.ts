@@ -1,10 +1,20 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
+import { create } from "zustand";
+import type { BrowserProvider, JsonRpcSigner } from "ethers";
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+type Session = {
+  provider: BrowserProvider | null;
+  signer: JsonRpcSigner | null;
+  account: string | null;
+  chainId: number | null;
+  set: (p: Partial<Session>) => void;
+  clear: () => void;
+};
+
+export const useSession = create<Session>((set) => ({
+  provider: null,
+  signer: null,
+  account: null,
+  chainId: null,
+  set: (p) => set(p),
+  clear: () => set({ provider: null, signer: null, account: null, chainId: null }),
+}));
