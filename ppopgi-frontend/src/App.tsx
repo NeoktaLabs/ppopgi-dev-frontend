@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useSession } from "./state/useSession";
 import { SignInModal } from "./components/SignInModal";
 import { DisclaimerGate } from "./components/DisclaimerGate";
+import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
 import { ETHERLINK_MAINNET } from "./chain/etherlink";
 import { useAutoRestoreSession } from "./wallet/useAutoRestoreSession";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
@@ -28,6 +29,10 @@ export default function App() {
   const [signInOpen, setSignInOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
 
+  // raffle details modal state
+  const [raffleOpen, setRaffleOpen] = useState(false);
+  const [selectedRaffleId, setSelectedRaffleId] = useState<string | null>(null);
+
   useEffect(() => {
     setGateOpen(!hasAcceptedDisclaimer());
   }, []);
@@ -39,8 +44,17 @@ export default function App() {
     setGateOpen(false);
   }
 
-  // ✅ Home lists: indexer-first with automatic on-chain fallback
   const { bigPrizes, endingSoon, note } = useHomeRaffles();
+
+  function openRaffle(id: string) {
+    setSelectedRaffleId(id);
+    setRaffleOpen(true);
+  }
+
+  function closeRaffle() {
+    setRaffleOpen(false);
+    // keep selectedRaffleId so re-open is instant if you want
+  }
 
   return (
     <div style={{ padding: 20 }}>
@@ -91,20 +105,12 @@ export default function App() {
           {bigPrizes.map((r) => (
             <div
               key={r.id}
-              style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}
+              style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12, cursor: "pointer" }}
               role="button"
               tabIndex={0}
-              onClick={() => {
-                // Later: open raffle details modal
-                // For now: keep it calm and simple.
-                // eslint-disable-next-line no-alert
-                alert(`Raffle: ${r.name}\n\nAddress:\n${r.id}`);
-              }}
+              onClick={() => openRaffle(r.id)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  // eslint-disable-next-line no-alert
-                  alert(`Raffle: ${r.name}\n\nAddress:\n${r.id}`);
-                }
+                if (e.key === "Enter") openRaffle(r.id);
               }}
             >
               <div style={{ fontWeight: 700 }}>{r.name}</div>
@@ -134,19 +140,12 @@ export default function App() {
           {endingSoon.map((r) => (
             <div
               key={r.id}
-              style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}
+              style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12, cursor: "pointer" }}
               role="button"
               tabIndex={0}
-              onClick={() => {
-                // Later: open raffle details modal
-                // eslint-disable-next-line no-alert
-                alert(`Raffle: ${r.name}\n\nAddress:\n${r.id}`);
-              }}
+              onClick={() => openRaffle(r.id)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  // eslint-disable-next-line no-alert
-                  alert(`Raffle: ${r.name}\n\nAddress:\n${r.id}`);
-                }
+                if (e.key === "Enter") openRaffle(r.id);
               }}
             >
               <div style={{ fontWeight: 700 }}>{r.name}</div>
@@ -165,7 +164,14 @@ export default function App() {
         </div>
       </div>
 
+      {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
+
+      <RaffleDetailsModal
+        open={raffleOpen}
+        raffleId={selectedRaffleId}
+        onClose={closeRaffle}
+      />
     </div>
   );
 }
