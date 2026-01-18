@@ -1,7 +1,7 @@
 // src/hooks/useFactoryConfig.ts
 import { useEffect, useState } from "react";
 import { Contract, JsonRpcProvider } from "ethers";
-import SingleWinnerDeployerAbi from "../contracts/abis/SingleWinnerDeployer.json";
+import SingleWinnerDeployerAbi from "../config/abis/SingleWinnerDeployer.json";
 
 // ✅ Use your existing canonical addresses file
 // If your export name differs, adjust this import only.

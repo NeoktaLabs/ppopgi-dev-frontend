@@ -1,8 +1,8 @@
 // src/onchain/fallbackRaffles.ts
 import { BrowserProvider, Contract, JsonRpcProvider } from "ethers";
-import { ADDRESSES } from "../contracts/addresses";
-import LotteryRegistryAbi from "../contracts/abis/LotteryRegistry.json";
-import LotterySingleWinnerAbi from "../contracts/abis/LotterySingleWinner.json";
+import { ADDRESSES } from "../config/addresses";
+import LotteryRegistryAbi from "../config/abis/LotteryRegistry.json";
+import LotterySingleWinnerAbi from "../config/abis/LotterySingleWinner.json";
 import type { RaffleListItem, RaffleStatus } from "../indexer/subgraph";
 
 function mustEnv(name: string): string {
