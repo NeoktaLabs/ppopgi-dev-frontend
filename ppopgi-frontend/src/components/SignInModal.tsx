@@ -34,13 +34,15 @@ export function SignInModal({ open, onClose }: Props) {
   const browserAvailable = useMemo(() => hasBrowserSignIn(), []);
   const metaMaskHint = useMemo(() => hasMetaMaskHint(), []);
 
-  const metaMaskWalletId = (import.meta.env.VITE_MM_WC_WALLET_ID as string | undefined) || undefined;
+  const metaMaskWalletId =
+    (import.meta.env.VITE_MM_WC_WALLET_ID as string | undefined) || undefined;
 
   if (!open) return null;
 
   async function doMetaMask() {
     setMessage(null);
     setBusy("metamask");
+
     try {
       // 1) Prefer injected MetaMask (extension / MetaMask in-app browser)
       try {
@@ -59,7 +61,7 @@ export function SignInModal({ open, onClose }: Props) {
         if (e?.message !== "NO_METAMASK_INJECTED") throw e;
       }
 
-      // 2) Fallback: WalletConnect (all wallets) but recommend MetaMask if we have an id
+      // 2) Fallback: WalletConnect (all wallets), recommend MetaMask if possible
       const s2 = await connectWalletConnect({
         recommendedWalletIds: metaMaskWalletId ? [metaMaskWalletId] : undefined,
       });
@@ -75,7 +77,7 @@ export function SignInModal({ open, onClose }: Props) {
       onClose();
     } catch (e: any) {
       if (e?.message === "MISSING_WC_PROJECT_ID") {
-        setMessage("Setup needed: missing QR sign-in key (project id).");
+        setMessage("Setup needed: missing QR sign-in key.");
       } else if (e?.message === "WC_CONNECT_REJECTED") {
         setMessage("Sign in was canceled.");
       } else {
@@ -89,6 +91,7 @@ export function SignInModal({ open, onClose }: Props) {
   async function doBrowser() {
     setMessage(null);
     setBusy("browser");
+
     try {
       const s = await connectInjected();
       setSession({
@@ -114,6 +117,7 @@ export function SignInModal({ open, onClose }: Props) {
   async function doQr() {
     setMessage(null);
     setBusy("qr");
+
     try {
       const s = await connectWalletConnect();
       setSession({
@@ -127,7 +131,7 @@ export function SignInModal({ open, onClose }: Props) {
       onClose();
     } catch (e: any) {
       if (e?.message === "MISSING_WC_PROJECT_ID") {
-        setMessage("Setup needed: missing QR sign-in key (project id).");
+        setMessage("Setup needed: missing QR sign-in key.");
       } else if (e?.message === "WC_CONNECT_REJECTED") {
         setMessage("Sign in was canceled.");
       } else {
@@ -138,146 +142,161 @@ export function SignInModal({ open, onClose }: Props) {
     }
   }
 
-  const overlay: React.CSSProperties = {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.35)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    zIndex: 9999,
-  };
-
-  const card: React.CSSProperties = {
-    width: "min(460px, 100%)",
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.35)",
-    background: "rgba(255,255,255,0.22)",
-    backdropFilter: "blur(14px)",
-    WebkitBackdropFilter: "blur(14px)",
-    boxShadow: "0 12px 40px rgba(0,0,0,0.18)",
-    padding: 18,
-  };
-
-  const titleRow: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  };
-
-  const h2: React.CSSProperties = { margin: 0, fontSize: 18, color: "#2B2B33" };
-
-  const closeBtn: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.5)",
-    background: "rgba(255,255,255,0.25)",
-    borderRadius: 12,
-    padding: "8px 10px",
-    cursor: "pointer",
-  };
-
-  const p: React.CSSProperties = { margin: "10px 0 0", color: "#2B2B33", lineHeight: 1.35 };
-
-  const buttonRow: React.CSSProperties = { display: "grid", gap: 10, marginTop: 14 };
-
-  const btn: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.45)",
-    background: "rgba(255,255,255,0.24)",
-    borderRadius: 14,
-    padding: "12px 12px",
-    cursor: "pointer",
-    textAlign: "left",
-    color: "#2B2B33",
-  };
-
-  const btnDisabled: React.CSSProperties = {
-    ...btn,
-    opacity: 0.55,
-    cursor: "not-allowed",
-  };
-
-  const small: React.CSSProperties = { fontSize: 13, opacity: 0.85, marginTop: 4 };
-
-  const note: React.CSSProperties = {
-    marginTop: 12,
-    fontSize: 13,
-    opacity: 0.85,
-    color: "#2B2B33",
-  };
-
-  const infoBox: React.CSSProperties = {
-    marginTop: 12,
-    padding: 10,
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.35)",
-    background: "rgba(255,255,255,0.18)",
-    color: "#2B2B33",
-    fontSize: 13,
-    lineHeight: 1.35,
-  };
-
   const busyText =
     busy === "metamask"
-      ? "Opening MetaMask sign in…"
+      ? "Opening sign in…"
       : busy === "browser"
       ? "Signing in…"
       : busy === "qr"
-      ? "Opening QR sign in…"
+      ? "Opening sign in…"
       : null;
 
   return (
-    <div style={overlay} onMouseDown={onClose}>
-      <div style={card} onMouseDown={(e) => e.stopPropagation()}>
-        <div style={titleRow}>
-          <h2 style={h2}>Sign in</h2>
-          <button style={closeBtn} onClick={onClose} aria-label="Close">
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.35)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        zIndex: 9999,
+      }}
+      onMouseDown={onClose}
+    >
+      <div
+        style={{
+          width: "min(460px, 100%)",
+          borderRadius: 18,
+          border: "1px solid rgba(255,255,255,0.35)",
+          background: "rgba(255,255,255,0.22)",
+          backdropFilter: "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.18)",
+          padding: 18,
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: 18, color: "#2B2B33" }}>Sign in</h2>
+          <button
+            style={{
+              border: "1px solid rgba(255,255,255,0.5)",
+              background: "rgba(255,255,255,0.25)",
+              borderRadius: 12,
+              padding: "8px 10px",
+              cursor: "pointer",
+            }}
+            onClick={onClose}
+            aria-label="Close"
+          >
             Close
           </button>
         </div>
 
-        <p style={p}>
-          Choose how you want to sign in. This app runs on <b>{ETHERLINK_MAINNET.chainName}</b>.
+        <p style={{ margin: "10px 0 0", color: "#2B2B33", lineHeight: 1.35 }}>
+          Choose how you want to sign in. This app runs on{" "}
+          <b>{ETHERLINK_MAINNET.chainName}</b>.
         </p>
 
-        <div style={buttonRow}>
+        <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+          {/* MetaMask */}
           <button
-            style={!busy ? btn : btnDisabled}
+            style={{
+              border: "1px solid rgba(255,255,255,0.45)",
+              background: "rgba(255,255,255,0.24)",
+              borderRadius: 14,
+              padding: "12px 12px",
+              cursor: "pointer",
+              textAlign: "left",
+              color: "#2B2B33",
+              opacity: busy ? 0.55 : 1,
+            }}
             disabled={!!busy}
             onClick={doMetaMask}
-            aria-label="Sign in with MetaMask"
           >
             <div style={{ fontWeight: 700 }}>MetaMask</div>
-            <div style={small}>
+            <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>
               {metaMaskHint
                 ? "Use MetaMask in this browser."
-                : "If MetaMask isn’t in this browser, you can still use it from your phone."}
+                : metaMaskWalletId
+                ? "You can still use MetaMask from your phone."
+                : "You can still use MetaMask from your phone. Choose MetaMask in the list."}
             </div>
           </button>
 
+          {/* Browser */}
           <button
-            style={browserAvailable && !busy ? btn : btnDisabled}
+            style={{
+              border: "1px solid rgba(255,255,255,0.45)",
+              background: "rgba(255,255,255,0.24)",
+              borderRadius: 14,
+              padding: "12px 12px",
+              cursor: browserAvailable && !busy ? "pointer" : "not-allowed",
+              textAlign: "left",
+              color: "#2B2B33",
+              opacity: browserAvailable && !busy ? 1 : 0.55,
+            }}
             disabled={!browserAvailable || !!busy}
             onClick={doBrowser}
           >
             <div style={{ fontWeight: 700 }}>Sign in (Browser)</div>
-            <div style={small}>Best if you already have a sign-in tool in this browser.</div>
+            <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>
+              Best if you already have a sign-in tool in this browser.
+            </div>
           </button>
 
-          <button style={!busy ? btn : btnDisabled} disabled={!!busy} onClick={doQr}>
+          {/* QR */}
+          <button
+            style={{
+              border: "1px solid rgba(255,255,255,0.45)",
+              background: "rgba(255,255,255,0.24)",
+              borderRadius: 14,
+              padding: "12px 12px",
+              cursor: !busy ? "pointer" : "not-allowed",
+              textAlign: "left",
+              color: "#2B2B33",
+              opacity: !busy ? 1 : 0.55,
+            }}
+            disabled={!!busy}
+            onClick={doQr}
+          >
             <div style={{ fontWeight: 700 }}>Sign in (QR)</div>
-            <div style={small}>Use your phone to sign in. Works well on Safari.</div>
+            <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>
+              Use your phone to sign in. Works well on Safari.
+            </div>
           </button>
         </div>
 
         {(busyText || message) && (
-          <div style={infoBox}>
-            {busyText ? <div>{busyText}</div> : null}
-            {message ? <div style={{ marginTop: busyText ? 8 : 0 }}>{message}</div> : null}
+          <div
+            style={{
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.35)",
+              background: "rgba(255,255,255,0.18)",
+              color: "#2B2B33",
+              fontSize: 13,
+              lineHeight: 1.35,
+            }}
+          >
+            {busyText && <div>{busyText}</div>}
+            {message && <div style={{ marginTop: busyText ? 8 : 0 }}>{message}</div>}
           </div>
         )}
 
-        <div style={note}>Nothing happens automatically. You always confirm actions yourself.</div>
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85, color: "#2B2B33" }}>
+          Nothing happens automatically. You always confirm actions yourself.
+        </div>
       </div>
     </div>
   );
