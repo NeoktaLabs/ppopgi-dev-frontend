@@ -120,29 +120,42 @@ export async function connectWalletConnect(opts?: ConnectWcOpts) {
   const showQrModal = opts?.showQrModal ?? true;
 
   const wc = await EthereumProvider.init({
-    projectId,
+  projectId,
 
-    // ✅ Require Etherlink as the session chain
-    chains: [ETHERLINK_MAINNET.chainId],
-    optionalChains: [ETHERLINK_MAINNET.chainId],
+  // ✅ IMPORTANT: use optionalChains (recommended)
+  // Do NOT use `chains:` here (it makes Etherlink required and some wallets reject)
+  optionalChains: [ETHERLINK_MAINNET.chainId],
 
-    rpcMap: {
-      [ETHERLINK_MAINNET.chainId]: rpcUrl,
-    },
+  // ✅ Include methods we will call (switch/add)
+  optionalMethods: [
+    "eth_requestAccounts",
+    "eth_accounts",
+    "eth_chainId",
+    "wallet_switchEthereumChain",
+    "wallet_addEthereumChain",
+    "eth_sendTransaction",
+    "personal_sign",
+    "eth_signTypedData",
+    "eth_signTypedData_v4",
+  ],
 
-    showQrModal,
+  rpcMap: {
+    [ETHERLINK_MAINNET.chainId]: rpcUrl,
+  },
 
-    ...(opts?.recommendedWalletIds
-      ? { qrModalOptions: { recommendedWalletIds: opts.recommendedWalletIds } }
-      : {}),
+  showQrModal,
 
-    metadata: {
-      name: "Ppopgi",
-      description: "Ppopgi raffle booth on Etherlink",
-      url: window.location.origin,
-      icons: [],
-    },
-  });
+  ...(opts?.recommendedWalletIds
+    ? { qrModalOptions: { recommendedWalletIds: opts.recommendedWalletIds } }
+    : {}),
+
+  metadata: {
+    name: "Ppopgi",
+    description: "Ppopgi raffle booth on Etherlink",
+    url: window.location.origin,
+    icons: [],
+  },
+});
 
   // ✅ IMPORTANT:
   // - If showQrModal=true, this opens the QR modal if needed.
