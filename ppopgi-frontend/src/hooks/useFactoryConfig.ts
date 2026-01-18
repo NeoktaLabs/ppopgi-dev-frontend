@@ -5,7 +5,7 @@ import SingleWinnerDeployerAbi from "../config/abis/SingleWinnerDeployer.json";
 
 // ✅ Use your existing canonical addresses file
 // If your export name differs, adjust this import only.
-import { CONTRACTS } from "../config/contracts";
+import {ADDRESSES} from "../config/contracts";
 
 export type FactoryConfig = {
   usdc: string;

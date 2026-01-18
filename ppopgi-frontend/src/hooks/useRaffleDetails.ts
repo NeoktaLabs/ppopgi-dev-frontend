@@ -1,7 +1,7 @@
 // src/hooks/useRaffleDetails.ts
 import { useEffect, useState } from "react";
 import { Contract, JsonRpcProvider } from "ethers";
-import LotterySingleWinnerAbi from "../contracts/abis/LotterySingleWinner.json";
+import LotterySingleWinnerAbi from "../config/abis/LotterySingleWinner.json";
 
 export type RaffleStatus = "FUNDING_PENDING" | "OPEN" | "DRAWING" | "COMPLETED" | "CANCELED";
 
