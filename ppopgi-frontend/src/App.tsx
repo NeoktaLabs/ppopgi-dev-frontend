@@ -1,28 +1,41 @@
 // src/App.tsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useSession } from "./state/useSession";
 import { SignInModal } from "./components/SignInModal";
+import { DisclaimerGate } from "./components/DisclaimerGate";
 import { ETHERLINK_MAINNET } from "./chain/etherlink";
 import { useAutoRestoreSession } from "./wallet/useAutoRestoreSession";
+import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 
 function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
 export default function App() {
-  // ✅ restores previous sign-in after refresh (best effort)
   useAutoRestoreSession();
 
   const account = useSession((s) => s.account);
   const chainId = useSession((s) => s.chainId);
   const clear = useSession((s) => s.clear);
 
-  const [open, setOpen] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
+
+  useEffect(() => {
+    setGateOpen(!hasAcceptedDisclaimer());
+  }, []);
 
   const wrongPlace = !!account && chainId !== ETHERLINK_MAINNET.chainId;
 
+  function onAcceptGate() {
+    acceptDisclaimer();
+    setGateOpen(false);
+  }
+
   return (
     <div style={{ padding: 20 }}>
+      <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <b>Ppopgi</b>
 
@@ -35,7 +48,7 @@ export default function App() {
           <button>Cashier</button>
 
           {!account ? (
-            <button onClick={() => setOpen(true)}>Sign in</button>
+            <button onClick={() => setSignInOpen(true)}>Sign in</button>
           ) : (
             <>
               <span>Your account: {short(account)}</span>
@@ -52,7 +65,7 @@ export default function App() {
         </div>
       )}
 
-      <SignInModal open={open} onClose={() => setOpen(false)} />
+      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
     </div>
   );
 }
