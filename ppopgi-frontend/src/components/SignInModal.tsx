@@ -87,7 +87,14 @@ export function SignInModal({ open, onClose }: Props) {
   return (
     <div style={overlay} onMouseDown={onClose}>
       <div style={card} onMouseDown={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
           <h2 style={{ margin: 0, fontSize: 18, color: "#2B2B33" }}>Sign in</h2>
           <button style={closeBtn} onClick={onClose} aria-label="Close">
             Close
@@ -95,7 +102,8 @@ export function SignInModal({ open, onClose }: Props) {
         </div>
 
         <p style={{ margin: "10px 0 0", color: "#2B2B33", lineHeight: 1.35 }}>
-          Choose how you want to sign in. This raffle booth runs on <b>{ETHERLINK_MAINNET.chainName}</b>.
+          Choose how you want to sign in. This raffle booth runs on{" "}
+          <b>{ETHERLINK_MAINNET.chainName}</b>.
         </p>
 
         <div style={{ marginTop: 14 }}>
@@ -108,8 +116,8 @@ export function SignInModal({ open, onClose }: Props) {
               createWallet("io.metamask"),
               // WalletConnect (QR, many wallets)
               createWallet("walletConnect"),
-              // Injected (Brave, Coinbase extension, etc.)
-              createWallet("injected"),
+              // Coinbase Wallet (common extension + mobile)
+              createWallet("com.coinbase.wallet"),
             ]}
           />
         </div>
