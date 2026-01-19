@@ -1,6 +1,7 @@
 // src/components/RaffleCard.tsx
 import React, { useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
+import { formatUnits } from "ethers";
 
 type Props = {
   raffle: RaffleListItem;
@@ -11,6 +12,15 @@ function formatDeadline(seconds: string) {
   const n = Number(seconds);
   if (!Number.isFinite(n) || n <= 0) return "Unknown time";
   return new Date(n * 1000).toLocaleString();
+}
+
+function fmtUsdc(raw: string) {
+  try {
+    // USDC uses 6 decimals
+    return formatUnits(BigInt(raw || "0"), 6);
+  } catch {
+    return "0";
+  }
 }
 
 export function RaffleCard({ raffle, onOpen }: Props) {
@@ -140,7 +150,7 @@ export function RaffleCard({ raffle, onOpen }: Props) {
       </div>
 
       <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Win: {raffle.winningPot} USDC • Ticket: {raffle.ticketPrice} USDC
+        Win: {fmtUsdc(raffle.winningPot)} USDC • Ticket: {fmtUsdc(raffle.ticketPrice)} USDC
       </div>
 
       <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
