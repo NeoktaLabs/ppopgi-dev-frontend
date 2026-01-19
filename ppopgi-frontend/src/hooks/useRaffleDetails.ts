@@ -1,78 +1,45 @@
 // src/hooks/useRaffleDetails.ts
-import { useEffect, useState } from "react";
-import { Contract, JsonRpcProvider } from "ethers";
-import LotterySingleWinnerAbi from "../config/abis/LotterySingleWinner.json";
-
-export type RaffleStatus = "FUNDING_PENDING" | "OPEN" | "DRAWING" | "COMPLETED" | "CANCELED";
+import { useEffect, useMemo, useState } from "react";
+import { getContract, readContract } from "thirdweb";
+import { thirdwebClient } from "../thirdweb/client";
+import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
 
 export type RaffleDetails = {
-  id: string;
+  address: string;
 
   name: string;
-  status: RaffleStatus;
-  paused: boolean;
+  status: number; // enum Status as uint8
+  sold: string;
 
-  usdc: string;
-  creator: string;
-  deployer: string;
+  ticketPrice: string; // uint256 as string (USDC 6 decimals)
+  winningPot: string; // uint256 as string (USDC 6 decimals)
 
-  winningPot: string;
-  ticketPrice: string;
   minTickets: string;
   maxTickets: string;
+  deadline: string; // unix seconds
+  paused: boolean;
 
-  sold: string;
-  ticketRevenue: string;
-
-  deadline: string;
-
-  feeRecipient: string;
-  protocolFeePercent: string;
-
-  // drawing fields
-  selectedProvider: string;
-  entropyRequestId: string;
-  drawingRequestedAt: string;
-
-  // result fields
+  usdcToken: string;
+  creator: string;
   winner: string;
-  winningTicketIndex: string;
-
-  // cancel fields
-  canceledAt: string;
-  soldAtCancel: string;
-
-  // proof-ish fields (shown in safety section)
-  entropy: string;
-  entropyProvider: string;
 };
 
-function mustEnv(name: string): string {
-  const v = (import.meta as any).env?.[name];
-  if (!v) throw new Error(`MISSING_ENV_${name}`);
-  return v;
-}
-
-function statusFromUint8(x: number): RaffleStatus {
-  if (x === 0) return "FUNDING_PENDING";
-  if (x === 1) return "OPEN";
-  if (x === 2) return "DRAWING";
-  if (x === 3) return "COMPLETED";
-  return "CANCELED";
-}
-
-export function useRaffleDetails(raffleId: string | null) {
+export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
   const [data, setData] = useState<RaffleDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
+  const contract = useMemo(() => {
+    if (!raffleAddress) return null;
+    return getContract({
+      client: thirdwebClient,
+      chain: ETHERLINK_CHAIN,
+      address: raffleAddress,
+    });
+  }, [raffleAddress]);
+
   useEffect(() => {
-    if (!raffleId) {
-      setData(null);
-      setLoading(false);
-      setNote(null);
-      return;
-    }
+    if (!open || !contract || !raffleAddress) return;
 
     let alive = true;
 
@@ -81,118 +48,53 @@ export function useRaffleDetails(raffleId: string | null) {
       setNote(null);
 
       try {
-        const rpcUrl = mustEnv("VITE_ETHERLINK_RPC_URL");
-        const rpc = new JsonRpcProvider(rpcUrl);
-        const c = new Contract(raffleId, LotterySingleWinnerAbi, rpc);
-
         const [
           name,
-          statusU8,
-          paused,
-
-          usdc,
-          creator,
-          deployer,
-
-          winningPot,
+          status,
+          sold,
           ticketPrice,
+          winningPot,
           minTickets,
           maxTickets,
-
-          sold,
-          ticketRevenue,
-
           deadline,
-
-          feeRecipient,
-          protocolFeePercent,
-
-          selectedProvider,
-          entropyRequestId,
-          drawingRequestedAt,
-
+          paused,
+          usdcToken,
+          creator,
           winner,
-          winningTicketIndex,
-
-          canceledAt,
-          soldAtCancel,
-
-          entropy,
-          entropyProvider,
         ] = await Promise.all([
-          c.name(),
-          c.status(),
-          c.paused(),
-
-          c.usdcToken(),
-          c.creator(),
-          c.deployer(),
-
-          c.winningPot(),
-          c.ticketPrice(),
-          c.minTickets(),
-          c.maxTickets(),
-
-          c.getSold(),
-          c.ticketRevenue(),
-
-          c.deadline(),
-
-          c.feeRecipient(),
-          c.protocolFeePercent(),
-
-          c.selectedProvider(),
-          c.entropyRequestId(),
-          c.drawingRequestedAt(),
-
-          c.winner(),
-          c.winningTicketIndex(),
-
-          c.canceledAt(),
-          c.soldAtCancel(),
-
-          c.entropy(),
-          c.entropyProvider(),
+          readContract({ contract, method: "function name() view returns (string)" }),
+          readContract({ contract, method: "function status() view returns (uint8)" }),
+          readContract({ contract, method: "function getSold() view returns (uint256)" }),
+          readContract({ contract, method: "function ticketPrice() view returns (uint256)" }),
+          readContract({ contract, method: "function winningPot() view returns (uint256)" }),
+          readContract({ contract, method: "function minTickets() view returns (uint64)" }),
+          readContract({ contract, method: "function maxTickets() view returns (uint64)" }),
+          readContract({ contract, method: "function deadline() view returns (uint64)" }),
+          readContract({ contract, method: "function paused() view returns (bool)" }),
+          readContract({ contract, method: "function usdcToken() view returns (address)" }),
+          readContract({ contract, method: "function creator() view returns (address)" }),
+          readContract({ contract, method: "function winner() view returns (address)" }),
         ]);
 
         if (!alive) return;
 
         setData({
-          id: raffleId,
-
+          address: raffleAddress,
           name: String(name),
-          status: statusFromUint8(Number(statusU8)),
+          status: Number(status),
+          sold: String(sold),
+
+          ticketPrice: String(ticketPrice),
+          winningPot: String(winningPot),
+
+          minTickets: String(minTickets),
+          maxTickets: String(maxTickets),
+          deadline: String(deadline),
           paused: Boolean(paused),
 
-          usdc: String(usdc),
+          usdcToken: String(usdcToken),
           creator: String(creator),
-          deployer: String(deployer),
-
-          winningPot: winningPot.toString(),
-          ticketPrice: ticketPrice.toString(),
-          minTickets: minTickets.toString(),
-          maxTickets: maxTickets.toString(),
-
-          sold: sold.toString(),
-          ticketRevenue: ticketRevenue.toString(),
-
-          deadline: deadline.toString(),
-
-          feeRecipient: String(feeRecipient),
-          protocolFeePercent: protocolFeePercent.toString(),
-
-          selectedProvider: String(selectedProvider),
-          entropyRequestId: entropyRequestId.toString(),
-          drawingRequestedAt: drawingRequestedAt.toString(),
-
           winner: String(winner),
-          winningTicketIndex: winningTicketIndex.toString(),
-
-          canceledAt: canceledAt.toString(),
-          soldAtCancel: soldAtCancel.toString(),
-
-          entropy: String(entropy),
-          entropyProvider: String(entropyProvider),
         });
       } catch {
         if (!alive) return;
@@ -207,7 +109,7 @@ export function useRaffleDetails(raffleId: string | null) {
     return () => {
       alive = false;
     };
-  }, [raffleId]);
+  }, [open, contract, raffleAddress]);
 
   return { data, loading, note };
 }
