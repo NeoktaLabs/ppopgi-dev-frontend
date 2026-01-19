@@ -1,6 +1,6 @@
 // src/components/RaffleDetailsModal.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { formatUnits, parseUnits } from "ethers";
+import { formatUnits } from "ethers";
 import { useRaffleDetails } from "../hooks/useRaffleDetails";
 import { SafetyProofModal } from "./SafetyProofModal";
 
@@ -9,8 +9,6 @@ import { thirdwebClient } from "../thirdweb/client";
 import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
 import { useActiveAccount, useSendAndConfirmTransaction } from "thirdweb/react";
 
-// ✅ Your USDC address is saved in memory, but your codebase should have it in config.
-// If you already have ADDRESSES.USDC, replace this import accordingly.
 import { ADDRESSES } from "../config/contracts";
 
 type Props = {
@@ -56,7 +54,10 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   const { data, loading, note } = useRaffleDetails(raffleId, open);
   const [safetyOpen, setSafetyOpen] = useState(false);
 
-  const account = useActiveAccount();
+  // ✅ thirdweb is the source of truth
+  const activeAccount = useActiveAccount();
+  const isConnected = !!activeAccount?.address;
+
   const { mutateAsync: sendAndConfirm, isPending } = useSendAndConfirmTransaction();
 
   // --- Buy tickets UI state
@@ -99,10 +100,14 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     setBuyMsg(null);
   }, [open, raffleId]);
 
-  // Load USDC balance + allowance (on-chain) when open + account + raffle loaded
+  // --- compute purchase cost
+  const ticketCount = Math.max(0, toInt(tickets, 0));
+  const ticketPriceU = data ? BigInt(data.ticketPrice) : 0n;
+  const totalCostU = BigInt(ticketCount) * ticketPriceU;
+
   async function refreshAllowance() {
     if (!open) return;
-    if (!account?.address) return;
+    if (!activeAccount?.address) return;
     if (!usdcContract) return;
     if (!raffleId) return;
 
@@ -112,19 +117,18 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
         readContract({
           contract: usdcContract,
           method: "function balanceOf(address) view returns (uint256)",
-          params: [account.address],
+          params: [activeAccount.address],
         }),
         readContract({
           contract: usdcContract,
           method: "function allowance(address,address) view returns (uint256)",
-          params: [account.address, raffleId],
+          params: [activeAccount.address, raffleId],
         }),
       ]);
 
       setUsdcBal(BigInt(bal as any));
       setAllowance(BigInt(a as any));
     } catch {
-      // don’t scare user; just hide these numbers if it fails
       setUsdcBal(null);
       setAllowance(null);
     } finally {
@@ -132,23 +136,29 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     }
   }
 
+  // Load USDC balance + allowance when open + account + raffle loaded
   useEffect(() => {
+    if (!open) return;
+    if (!activeAccount?.address) return;
     refreshAllowance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, account?.address, raffleId, data?.usdcToken]);
+  }, [open, activeAccount?.address, raffleId, data?.usdcToken]);
+
+  // Optional but helpful: if ticket count changes, allowance requirements change too
+  useEffect(() => {
+    if (!open) return;
+    if (!activeAccount?.address) return;
+    // no spam — just recompute UI from existing allowance/bal; refresh not required
+    // but we keep this hook in case you want to uncomment a refresh later
+  }, [open, activeAccount?.address, ticketCount]);
 
   if (!open) return null;
-
-  // --- compute purchase cost
-  const ticketCount = Math.max(0, toInt(tickets, 0));
-  const ticketPriceU = data ? BigInt(data.ticketPrice) : 0n;
-  const totalCostU = BigInt(ticketCount) * ticketPriceU;
 
   const hasEnoughAllowance = allowance !== null ? allowance >= totalCostU : false;
   const hasEnoughBalance = usdcBal !== null ? usdcBal >= totalCostU : true; // if unknown, don’t block
 
   const canBuy =
-    !!account?.address &&
+    isConnected &&
     !!data &&
     data.status === "OPEN" &&
     !data.paused &&
@@ -159,7 +169,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     !isPending;
 
   const needsAllow =
-    !!account?.address &&
+    isConnected &&
     !!data &&
     data.status === "OPEN" &&
     !data.paused &&
@@ -170,7 +180,8 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
   async function onAllow() {
     setBuyMsg(null);
-    if (!account?.address) {
+
+    if (!activeAccount?.address) {
       setBuyMsg("Please sign in first.");
       return;
     }
@@ -184,7 +195,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     }
 
     try {
-      // Allow exactly what's needed (simple + safe).
       const tx = prepareContractCall({
         contract: usdcContract,
         method: "function approve(address spender,uint256 amount) returns (bool)",
@@ -203,7 +213,8 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
   async function onBuy() {
     setBuyMsg(null);
-    if (!account?.address) {
+
+    if (!activeAccount?.address) {
       setBuyMsg("Please sign in first.");
       return;
     }
@@ -225,29 +236,16 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     }
 
     try {
-      /**
-       * IMPORTANT:
-       * We’re starting with a simple “buy N tickets” call.
-       * If your contract uses (start,end) ranges instead, tell me the exact method signature
-       * and I’ll adapt this.
-       *
-       * Many single-winner raffles expose: buyTickets(uint64 amount)
-       * or: buy(uint64 amount)
-       *
-       * Replace the method below to match your LotterySingleWinner ABI if needed.
-       */
       const tx = prepareContractCall({
-  contract: raffleContract,
-  method: "function buy(uint64 amount)",
-  params: [BigInt(ticketCount)],
-});
+        contract: raffleContract,
+        method: "function buy(uint64 amount)",
+        params: [BigInt(ticketCount)],
+      });
 
       await sendAndConfirm(tx);
 
       setBuyMsg("You’re in. Tickets purchased.");
-      // Refresh details + allowance so UI updates smoothly
       await refreshAllowance();
-      // optional: you can also trigger your hook refresh if you add it later
     } catch (e: any) {
       const m = String(e?.message || "");
       if (m.toLowerCase().includes("rejected")) {
@@ -380,8 +378,16 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           </div>
         </div>
 
-        {loading && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Loading live details…</div>}
-        {note && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{note}</div>}
+        {loading && (
+          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
+            Loading live details…
+          </div>
+        )}
+        {note && (
+          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+            {note}
+          </div>
+        )}
 
         {data && (
           <>
@@ -403,7 +409,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                 </div>
               </div>
               {data.paused && (
-                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>This raffle is paused right now.</div>
+                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+                  This raffle is paused right now.
+                </div>
               )}
             </div>
 
@@ -440,52 +448,39 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
               />
 
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-                Total cost:{" "}
-                <b>{fmtUsdc(totalCostU.toString())} USDC</b>
+                Total cost: <b>{fmtUsdc(totalCostU.toString())} USDC</b>
               </div>
 
-              {account?.address ? (
+              {isConnected ? (
                 <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
                   {allowLoading ? (
                     "Checking coins…"
                   ) : (
                     <>
                       {usdcBal !== null ? `Your coins: ${fmtUsdc(usdcBal.toString())} USDC • ` : ""}
-                      {allowance !== null ? `Allowed for this raffle: ${fmtUsdc(allowance.toString())} USDC` : ""}
+                      {allowance !== null
+                        ? `Allowed for this raffle: ${fmtUsdc(allowance.toString())} USDC`
+                        : ""}
                     </>
                   )}
                 </div>
               ) : (
-                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-                  Please sign in to join.
-                </div>
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>Please sign in to join.</div>
               )}
 
-              {/* Allow step */}
-              <button
-                style={needsAllow ? btnEnabled : btnDisabled}
-                disabled={!needsAllow}
-                onClick={onAllow}
-              >
-                {isPending ? "Confirming…" : "Allow coins (USDC)"}
+              <button style={needsAllow ? btnEnabled : btnDisabled} disabled={!needsAllow} onClick={onAllow}>
+                {isPending ? "Confirming…" : isConnected ? "Allow coins (USDC)" : "Sign in to allow"}
               </button>
 
-              {/* Buy step */}
-              <button
-                style={canBuy ? btnEnabled : btnDisabled}
-                disabled={!canBuy}
-                onClick={onBuy}
-              >
-                {isPending ? "Confirming…" : account?.address ? "Buy tickets" : "Sign in to join"}
+              <button style={canBuy ? btnEnabled : btnDisabled} disabled={!canBuy} onClick={onBuy}>
+                {isPending ? "Confirming…" : isConnected ? "Buy tickets" : "Sign in to join"}
               </button>
 
               <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
                 Nothing happens automatically. You always confirm actions yourself.
               </div>
 
-              {buyMsg && (
-                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{buyMsg}</div>
-              )}
+              {buyMsg && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{buyMsg}</div>}
             </div>
 
             {/* Winner */}
@@ -516,7 +511,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           </>
         )}
 
-        {data && <SafetyProofModal open={safetyOpen} onClose={() => setSafetyOpen(false)} raffle={data} />}
+        {data && (
+          <SafetyProofModal open={safetyOpen} onClose={() => setSafetyOpen(false)} raffle={data} />
+        )}
       </div>
     </div>
   );
