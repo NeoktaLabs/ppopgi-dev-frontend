@@ -187,16 +187,25 @@ export default function App() {
       )}
 
       {/* EXPLORE */}
-      {page === "explore" && (
-        <ExplorePage onOpenRaffle={openRaffle} />
-      )}
+      {page === "explore" && <ExplorePage onOpenRaffle={openRaffle} />}
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
 
-      <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
+      <CreateRaffleModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={onCreatedRaffle}
+      />
 
-      <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={() => setDetailsOpen(false)} />
+      <RaffleDetailsModal
+        open={detailsOpen}
+        raffleId={selectedRaffleId}
+        onClose={() => setDetailsOpen(false)}
+      />
+
+      {/* ✅ Cashier modal was missing from render */}
+      <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} />
     </div>
   );
 }
