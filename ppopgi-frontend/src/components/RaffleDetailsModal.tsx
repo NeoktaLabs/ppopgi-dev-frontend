@@ -1,8 +1,17 @@
 // src/components/RaffleDetailsModal.tsx
-import React, { useMemo, useState } from "react";
-import { formatUnits } from "ethers";
+import React, { useEffect, useMemo, useState } from "react";
+import { formatUnits, parseUnits } from "ethers";
 import { useRaffleDetails } from "../hooks/useRaffleDetails";
 import { SafetyProofModal } from "./SafetyProofModal";
+
+import { getContract, prepareContractCall, readContract } from "thirdweb";
+import { thirdwebClient } from "../thirdweb/client";
+import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
+import { useActiveAccount, useSendAndConfirmTransaction } from "thirdweb/react";
+
+// ✅ Your USDC address is saved in memory, but your codebase should have it in config.
+// If you already have ADDRESSES.USDC, replace this import accordingly.
+import { ADDRESSES } from "../config/contracts";
 
 type Props = {
   open: boolean;
@@ -38,13 +47,218 @@ function fmtUsdc(raw: string) {
   }
 }
 
+function toInt(v: string, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.floor(n) : fallback;
+}
+
 export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   const { data, loading, note } = useRaffleDetails(raffleId, open);
   const [safetyOpen, setSafetyOpen] = useState(false);
 
+  const account = useActiveAccount();
+  const { mutateAsync: sendAndConfirm, isPending } = useSendAndConfirmTransaction();
+
+  // --- Buy tickets UI state
+  const [tickets, setTickets] = useState("1");
+  const [buyMsg, setBuyMsg] = useState<string | null>(null);
+
+  // --- Allowance/balance
+  const [usdcBal, setUsdcBal] = useState<bigint | null>(null);
+  const [allowance, setAllowance] = useState<bigint | null>(null);
+  const [allowLoading, setAllowLoading] = useState(false);
+
   const canShowWinner = useMemo(() => data?.status === "COMPLETED", [data?.status]);
 
+  // Contracts (thirdweb)
+  const raffleContract = useMemo(() => {
+    if (!raffleId) return null;
+    return getContract({
+      client: thirdwebClient,
+      chain: ETHERLINK_CHAIN,
+      address: raffleId,
+    });
+  }, [raffleId]);
+
+  const usdcContract = useMemo(() => {
+    // Prefer the raffle’s live USDC if present; fallback to config
+    const addr = data?.usdcToken || ADDRESSES.USDC;
+    if (!addr) return null;
+
+    return getContract({
+      client: thirdwebClient,
+      chain: ETHERLINK_CHAIN,
+      address: addr,
+    });
+  }, [data?.usdcToken]);
+
+  // Reset ticket input + messages when opening a new raffle
+  useEffect(() => {
+    if (!open) return;
+    setTickets("1");
+    setBuyMsg(null);
+  }, [open, raffleId]);
+
+  // Load USDC balance + allowance (on-chain) when open + account + raffle loaded
+  async function refreshAllowance() {
+    if (!open) return;
+    if (!account?.address) return;
+    if (!usdcContract) return;
+    if (!raffleId) return;
+
+    setAllowLoading(true);
+    try {
+      const [bal, a] = await Promise.all([
+        readContract({
+          contract: usdcContract,
+          method: "function balanceOf(address) view returns (uint256)",
+          params: [account.address],
+        }),
+        readContract({
+          contract: usdcContract,
+          method: "function allowance(address,address) view returns (uint256)",
+          params: [account.address, raffleId],
+        }),
+      ]);
+
+      setUsdcBal(BigInt(bal as any));
+      setAllowance(BigInt(a as any));
+    } catch {
+      // don’t scare user; just hide these numbers if it fails
+      setUsdcBal(null);
+      setAllowance(null);
+    } finally {
+      setAllowLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshAllowance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, account?.address, raffleId, data?.usdcToken]);
+
   if (!open) return null;
+
+  // --- compute purchase cost
+  const ticketCount = Math.max(0, toInt(tickets, 0));
+  const ticketPriceU = data ? BigInt(data.ticketPrice) : 0n;
+  const totalCostU = BigInt(ticketCount) * ticketPriceU;
+
+  const hasEnoughAllowance = allowance !== null ? allowance >= totalCostU : false;
+  const hasEnoughBalance = usdcBal !== null ? usdcBal >= totalCostU : true; // if unknown, don’t block
+
+  const canBuy =
+    !!account?.address &&
+    !!data &&
+    data.status === "OPEN" &&
+    !data.paused &&
+    ticketCount > 0 &&
+    totalCostU > 0n &&
+    hasEnoughAllowance &&
+    hasEnoughBalance &&
+    !isPending;
+
+  const needsAllow =
+    !!account?.address &&
+    !!data &&
+    data.status === "OPEN" &&
+    !data.paused &&
+    ticketCount > 0 &&
+    totalCostU > 0n &&
+    !hasEnoughAllowance &&
+    !isPending;
+
+  async function onAllow() {
+    setBuyMsg(null);
+    if (!account?.address) {
+      setBuyMsg("Please sign in first.");
+      return;
+    }
+    if (!data || !raffleId || !usdcContract) {
+      setBuyMsg("Could not prepare this step. Please try again.");
+      return;
+    }
+    if (totalCostU <= 0n) {
+      setBuyMsg("Choose how many tickets you want first.");
+      return;
+    }
+
+    try {
+      // Allow exactly what's needed (simple + safe).
+      const tx = prepareContractCall({
+        contract: usdcContract,
+        method: "function approve(address spender,uint256 amount) returns (bool)",
+        params: [raffleId, totalCostU],
+      });
+
+      await sendAndConfirm(tx);
+      setBuyMsg("Coins allowed. You can now buy tickets.");
+      await refreshAllowance();
+    } catch (e: any) {
+      const m = String(e?.message || "");
+      if (m.toLowerCase().includes("rejected")) setBuyMsg("Action canceled.");
+      else setBuyMsg("Could not allow coins right now. Please try again.");
+    }
+  }
+
+  async function onBuy() {
+    setBuyMsg(null);
+    if (!account?.address) {
+      setBuyMsg("Please sign in first.");
+      return;
+    }
+    if (!data || !raffleContract) {
+      setBuyMsg("Could not prepare this purchase. Please try again.");
+      return;
+    }
+    if (data.status !== "OPEN") {
+      setBuyMsg("This raffle is not open right now.");
+      return;
+    }
+    if (data.paused) {
+      setBuyMsg("This raffle is paused right now.");
+      return;
+    }
+    if (ticketCount <= 0) {
+      setBuyMsg("Choose at least 1 ticket.");
+      return;
+    }
+
+    try {
+      /**
+       * IMPORTANT:
+       * We’re starting with a simple “buy N tickets” call.
+       * If your contract uses (start,end) ranges instead, tell me the exact method signature
+       * and I’ll adapt this.
+       *
+       * Many single-winner raffles expose: buyTickets(uint64 amount)
+       * or: buy(uint64 amount)
+       *
+       * Replace the method below to match your LotterySingleWinner ABI if needed.
+       */
+      const tx = prepareContractCall({
+        contract: raffleContract,
+        method: "function buyTickets(uint64 amount)",
+        params: [BigInt(ticketCount)],
+      });
+
+      await sendAndConfirm(tx);
+
+      setBuyMsg("You’re in. Tickets purchased.");
+      // Refresh details + allowance so UI updates smoothly
+      await refreshAllowance();
+      // optional: you can also trigger your hook refresh if you add it later
+    } catch (e: any) {
+      const m = String(e?.message || "");
+      if (m.toLowerCase().includes("rejected")) {
+        setBuyMsg("Purchase canceled.");
+      } else if (m.toLowerCase().includes("insufficient")) {
+        setBuyMsg("Not enough coins (USDC) to complete this.");
+      } else {
+        setBuyMsg("Could not buy tickets. Please try again.");
+      }
+    }
+  }
 
   const overlay: React.CSSProperties = {
     position: "fixed",
@@ -89,6 +303,40 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   const label: React.CSSProperties = { opacity: 0.85 };
   const value: React.CSSProperties = { fontWeight: 700 };
 
+  const input: React.CSSProperties = {
+    width: "100%",
+    border: "1px solid rgba(255,255,255,0.55)",
+    background: "rgba(255,255,255,0.35)",
+    borderRadius: 12,
+    padding: "10px 10px",
+    outline: "none",
+    color: "#2B2B33",
+  };
+
+  const btn: React.CSSProperties = {
+    width: "100%",
+    marginTop: 10,
+    border: "1px solid rgba(255,255,255,0.45)",
+    background: "rgba(255,255,255,0.24)",
+    borderRadius: 14,
+    padding: "12px 12px",
+    color: "#2B2B33",
+    fontWeight: 800,
+    textAlign: "center",
+  };
+
+  const btnDisabled: React.CSSProperties = {
+    ...btn,
+    cursor: "not-allowed",
+    opacity: 0.6,
+  };
+
+  const btnEnabled: React.CSSProperties = {
+    ...btn,
+    cursor: "pointer",
+    opacity: 1,
+  };
+
   return (
     <div style={overlay} onMouseDown={onClose}>
       <div style={card} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -132,10 +380,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           </div>
         </div>
 
-        {loading && (
-          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Loading live details…</div>
-        )}
-
+        {loading && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Loading live details…</div>}
         {note && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{note}</div>}
 
         {data && (
@@ -158,36 +403,92 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                 </div>
               </div>
               {data.paused && (
-                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-                  This raffle is paused right now.
-                </div>
+                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>This raffle is paused right now.</div>
               )}
             </div>
 
             <div style={section}>
               <div style={{ fontWeight: 800 }}>Costs</div>
-
               <div style={row}>
                 <div style={label}>Ticket</div>
                 <div style={value}>{fmtUsdc(data.ticketPrice)} USDC</div>
               </div>
-
               <div style={row}>
                 <div style={label}>Win</div>
                 <div style={value}>{fmtUsdc(data.winningPot)} USDC</div>
               </div>
-
               <div style={row}>
                 <div style={label}>Ppopgi fee</div>
                 <div style={value}>{data.protocolFeePercent}%</div>
               </div>
-
               <div style={row}>
                 <div style={label}>Fee receiver</div>
                 <div style={value}>{short(data.feeRecipient)}</div>
               </div>
             </div>
 
+            {/* --- BUY TICKETS --- */}
+            <div style={section}>
+              <div style={{ fontWeight: 800 }}>Join</div>
+
+              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>How many tickets</div>
+              <input
+                style={input}
+                value={tickets}
+                onChange={(e) => setTickets(e.target.value)}
+                placeholder="e.g. 3"
+              />
+
+              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
+                Total cost:{" "}
+                <b>{fmtUsdc(totalCostU.toString())} USDC</b>
+              </div>
+
+              {account?.address ? (
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+                  {allowLoading ? (
+                    "Checking coins…"
+                  ) : (
+                    <>
+                      {usdcBal !== null ? `Your coins: ${fmtUsdc(usdcBal.toString())} USDC • ` : ""}
+                      {allowance !== null ? `Allowed for this raffle: ${fmtUsdc(allowance.toString())} USDC` : ""}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+                  Please sign in to join.
+                </div>
+              )}
+
+              {/* Allow step */}
+              <button
+                style={needsAllow ? btnEnabled : btnDisabled}
+                disabled={!needsAllow}
+                onClick={onAllow}
+              >
+                {isPending ? "Confirming…" : "Allow coins (USDC)"}
+              </button>
+
+              {/* Buy step */}
+              <button
+                style={canBuy ? btnEnabled : btnDisabled}
+                disabled={!canBuy}
+                onClick={onBuy}
+              >
+                {isPending ? "Confirming…" : account?.address ? "Buy tickets" : "Sign in to join"}
+              </button>
+
+              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
+                Nothing happens automatically. You always confirm actions yourself.
+              </div>
+
+              {buyMsg && (
+                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{buyMsg}</div>
+              )}
+            </div>
+
+            {/* Winner */}
             {canShowWinner ? (
               <div style={section}>
                 <div style={{ fontWeight: 800 }}>Winner</div>
@@ -215,9 +516,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           </>
         )}
 
-        {data && (
-          <SafetyProofModal open={safetyOpen} onClose={() => setSafetyOpen(false)} raffle={data} />
-        )}
+        {data && <SafetyProofModal open={safetyOpen} onClose={() => setSafetyOpen(false)} raffle={data} />}
       </div>
     </div>
   );
