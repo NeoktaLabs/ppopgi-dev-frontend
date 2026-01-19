@@ -1,5 +1,5 @@
 // src/components/RaffleCard.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { formatUnits } from "ethers";
 
@@ -7,12 +7,6 @@ type Props = {
   raffle: RaffleListItem;
   onOpen: (id: string) => void;
 };
-
-function formatDeadline(seconds: string) {
-  const n = Number(seconds);
-  if (!Number.isFinite(n) || n <= 0) return "Unknown time";
-  return new Date(n * 1000).toLocaleString();
-}
 
 function fmtUsdc(raw: string) {
   try {
@@ -23,9 +17,40 @@ function fmtUsdc(raw: string) {
   }
 }
 
+// ✅ Live countdown: "Ends in 2d 3h 10m 05s"
+function formatEndsIn(deadlineSeconds: string, nowMs: number) {
+  const n = Number(deadlineSeconds);
+  if (!Number.isFinite(n) || n <= 0) return "Unknown time";
+
+  const deadlineMs = n * 1000;
+  const diffMs = deadlineMs - nowMs;
+
+  if (diffMs <= 0) return "Ended";
+
+  const totalSec = Math.floor(diffMs / 1000);
+
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+
+  const pad2 = (x: number) => String(x).padStart(2, "0");
+
+  // Show days only when >0, but always show h/m/s
+  const d = days > 0 ? `${days}d ` : "";
+  return `Ends in ${d}${hours}h ${minutes}m ${pad2(seconds)}s`;
+}
+
 export function RaffleCard({ raffle, onOpen }: Props) {
   const [shareOpen, setShareOpen] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+
+  // ✅ ticking clock (updates the countdown live)
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
 
   const shareUrl = useMemo(() => {
     const u = new URL(window.location.href);
@@ -158,8 +183,9 @@ export function RaffleCard({ raffle, onOpen }: Props) {
         {raffle.maxTickets !== "0" ? ` / ${raffle.maxTickets}` : ""}
       </div>
 
+      {/* ✅ live countdown */}
       <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Ends at: {formatDeadline(raffle.deadline)}
+        {formatEndsIn(raffle.deadline, nowMs)}
       </div>
 
       <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
