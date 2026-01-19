@@ -1,29 +1,25 @@
 // src/chain/useChainGuard.ts
-import { useMemo } from "react";
-import { useActiveWalletChain, useSwitchChain } from "thirdweb/react";
-import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
+import { useActiveWalletChain, useSwitchActiveWalletChain } from "thirdweb/react";
 import { ETHERLINK_MAINNET } from "./etherlink";
+import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
 
 export function useChainGuard() {
-  // thirdweb is the source of truth for the connected chain
-  const activeChain = useActiveWalletChain();
-  const switchChain = useSwitchChain();
+  // authoritative chain from thirdweb
+  const chain = useActiveWalletChain();
+  const switchChain = useSwitchActiveWalletChain();
 
-  const isOnEtherlink = useMemo(() => {
-    // If no wallet is connected yet, we treat it as "not on Etherlink"
-    if (!activeChain?.id) return false;
-    return activeChain.id === ETHERLINK_CHAIN.id;
-  }, [activeChain?.id]);
+  const activeChainId = chain?.id ?? null;
+  const isOnEtherlink = activeChainId === ETHERLINK_MAINNET.chainId;
 
   async function switchToEtherlink() {
-    // This will prompt the connected wallet to switch networks
+    // This opens the wallet UI and asks user to switch
     await switchChain(ETHERLINK_CHAIN);
   }
 
   return {
     isOnEtherlink,
-    expectedChain: ETHERLINK_MAINNET, // keep your existing UI-friendly object
-    activeChainId: activeChain?.id ?? null,
+    activeChainId,
+    expectedChain: ETHERLINK_MAINNET,
     switchToEtherlink,
   };
 }
