@@ -204,8 +204,11 @@ export default function App() {
         onClose={() => setDetailsOpen(false)}
       />
 
-      {/* ✅ Cashier modal was missing from render */}
-      <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} />
+      <CashierModal
+  open={cashierOpen}
+  onClose={() => setCashierOpen(false)}
+  onOpenRaffle={openRaffle}
+/>
     </div>
   );
 }
