@@ -1,306 +1,245 @@
-// src/hooks/useRaffleDetails.ts
-import { useEffect, useMemo, useState } from "react";
+// src/hooks/useCashierRaffles.ts
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { RaffleListItem } from "../indexer/subgraph";
 import { getContract, readContract } from "thirdweb";
 import { thirdwebClient } from "../thirdweb/client";
 import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
-import { getAddress } from "ethers";
 
-export type RaffleStatus =
-  | "FUNDING_PENDING"
-  | "OPEN"
-  | "DRAWING"
-  | "COMPLETED"
-  | "CANCELED"
-  | "UNKNOWN";
-
-function statusFromUint8(n: number): RaffleStatus {
-  if (n === 0) return "FUNDING_PENDING";
-  if (n === 1) return "OPEN";
-  if (n === 2) return "DRAWING";
-  if (n === 3) return "COMPLETED";
-  if (n === 4) return "CANCELED";
-  return "UNKNOWN";
+function mustEnv(name: string): string {
+  const v = (import.meta as any).env?.[name];
+  if (!v) throw new Error(`MISSING_ENV_${name}`);
+  return v;
 }
 
-export type RaffleDetails = {
-  address: string;
+function normAddr(a: string) {
+  return a.trim().toLowerCase();
+}
 
-  name: string;
-  status: RaffleStatus;
+export type CashierRaffleItem = {
+  raffle: RaffleListItem;
+  roles: { created: boolean; participated: boolean };
 
-  sold: string;
-  ticketRevenue: string;
-
-  ticketPrice: string; // uint256 raw (USDC 6 decimals)
-  winningPot: string; // uint256 raw (USDC 6 decimals)
-
-  minTickets: string; // uint64 raw
-  maxTickets: string; // uint64 raw
-  deadline: string; // uint64 unix seconds
-  paused: boolean;
-
-  usdcToken: string;
-  creator: string;
-
-  winner: string;
-  winningTicketIndex: string;
-
-  feeRecipient: string;
-  protocolFeePercent: string;
-
-  entropyProvider: string;
-  entropyRequestId: string;
-  selectedProvider: string;
+  // live on-chain claimables for the active user
+  claimableUsdc: string; // raw uint256 as string
+  claimableNative: string; // raw uint256 as string
+  isCreator: boolean;
 };
 
-async function readFirst(
-  contract: any,
-  label: string,
-  candidates: string[],
-  params: readonly unknown[] = []
-): Promise<any> {
-  let lastErr: any = null;
-  for (const method of candidates) {
-    try {
-      return await readContract({ contract, method, params });
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  // eslint-disable-next-line no-console
-  console.warn(`[useRaffleDetails] Failed to read ${label}. Tried:`, candidates, lastErr);
-  throw lastErr;
-}
+type Mode = "indexer" | "empty";
 
-async function readFirstOr(
-  contract: any,
-  label: string,
-  candidates: string[],
-  fallback: any,
-  params: readonly unknown[] = []
-): Promise<any> {
-  try {
-    return await readFirst(contract, label, candidates, params);
-  } catch {
-    return fallback;
-  }
-}
-
-export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
-  const [data, setData] = useState<RaffleDetails | null>(null);
-  const [loading, setLoading] = useState(false);
+export function useCashierRaffles(userAddress: string | null, limit = 200) {
+  const [items, setItems] = useState<CashierRaffleItem[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>("indexer");
 
-  const normalizedAddress = useMemo(() => {
-    if (!raffleAddress) return null;
-    try {
-      return getAddress(raffleAddress);
-    } catch {
-      return raffleAddress;
-    }
-  }, [raffleAddress]);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refetch = useCallback(() => setRefreshKey((x) => x + 1), []);
 
-  const contract = useMemo(() => {
-    if (!normalizedAddress) return null;
-    return getContract({
-      client: thirdwebClient,
-      chain: ETHERLINK_CHAIN,
-      address: normalizedAddress,
-    });
-  }, [normalizedAddress]);
+  const me = useMemo(() => (userAddress ? normAddr(userAddress) : null), [userAddress]);
 
   useEffect(() => {
-    if (!open || !contract || !normalizedAddress) return;
-
     let alive = true;
+    const controller = new AbortController();
+
+    async function fetchFromSubgraph(): Promise<{
+      merged: Array<{ raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>;
+    }> {
+      const url = mustEnv("VITE_SUBGRAPH_URL");
+      const user = me; // string lowercased
+
+      // We query created raffles + participated raffles via events.
+      // (creator exists in your schema; even if your existing RaffleListItem type doesn’t include it,
+      // we treat it as "any" and keep the rest stable.)
+      const query = `
+        query Cashier($user: Bytes!, $first: Int!) {
+          created: raffles(first: $first, where: { creator: $user }) {
+            id
+            name
+            status
+            winningPot
+            ticketPrice
+            deadline
+            sold
+            maxTickets
+            protocolFeePercent
+            feeRecipient
+            deployer
+            lastUpdatedTimestamp
+          }
+
+          participated: raffleEvents(
+            first: $first,
+            orderBy: blockTimestamp,
+            orderDirection: desc,
+            where: { type: TICKETS_PURCHASED, actor: $user }
+          ) {
+            raffle {
+              id
+              name
+              status
+              winningPot
+              ticketPrice
+              deadline
+              sold
+              maxTickets
+              protocolFeePercent
+              feeRecipient
+              deployer
+              lastUpdatedTimestamp
+              creator
+            }
+          }
+        }
+      `;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query, variables: { user, first: limit } }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) throw new Error("SUBGRAPH_HTTP_ERROR");
+      const json = await res.json();
+      if (json?.errors?.length) throw new Error("SUBGRAPH_GQL_ERROR");
+
+      const created = (json.data?.created ?? []) as RaffleListItem[];
+      const participatedEvents = (json.data?.participated ?? []) as Array<{ raffle: any }>;
+      const participated = participatedEvents.map((e) => e.raffle).filter(Boolean) as RaffleListItem[];
+
+      // Merge + dedupe with roles
+      const byId = new Map<
+        string,
+        { raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }
+      >();
+
+      for (const r of created) {
+        byId.set(normAddr(r.id), { raffle: r, roles: { created: true, participated: false } });
+      }
+
+      for (const r of participated) {
+        const key = normAddr(r.id);
+        const prev = byId.get(key);
+        if (prev) {
+          prev.roles.participated = true;
+        } else {
+          byId.set(key, { raffle: r, roles: { created: false, participated: true } });
+        }
+      }
+
+      const merged = Array.from(byId.values());
+
+      // Sort: newest activity-ish first (lastUpdatedTimestamp desc)
+      merged.sort((a, b) => {
+        const A = Number(a.raffle.lastUpdatedTimestamp || "0");
+        const B = Number(b.raffle.lastUpdatedTimestamp || "0");
+        return B - A;
+      });
+
+      return { merged };
+    }
+
+    async function enrichOnChain(
+      merged: Array<{ raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>
+    ): Promise<CashierRaffleItem[]> {
+      if (!me) return [];
+
+      // Lightweight on-chain reads for each raffle:
+      // claimableFunds(me), claimableNative(me), creator()
+      // Using method strings keeps you independent of ABI imports here.
+      const out: CashierRaffleItem[] = [];
+
+      // small concurrency control (avoid blasting RPC)
+      const batchSize = 10;
+      for (let i = 0; i < merged.length; i += batchSize) {
+        const slice = merged.slice(i, i + batchSize);
+
+        const results = await Promise.all(
+          slice.map(async ({ raffle, roles }) => {
+            const raffleContract = getContract({
+              client: thirdwebClient,
+              chain: ETHERLINK_CHAIN,
+              address: raffle.id,
+            });
+
+            const [claimableUsdc, claimableNative, creator] = await Promise.all([
+              readContract({
+                contract: raffleContract,
+                method: "function claimableFunds(address) view returns (uint256)",
+                params: [me],
+              }).catch(() => 0n),
+              readContract({
+                contract: raffleContract,
+                method: "function claimableNative(address) view returns (uint256)",
+                params: [me],
+              }).catch(() => 0n),
+              readContract({
+                contract: raffleContract,
+                method: "function creator() view returns (address)",
+                params: [],
+              }).catch(() => "0x0000000000000000000000000000000000000000"),
+            ]);
+
+            const creatorAddr = normAddr(String(creator));
+            const isCreator = creatorAddr === me;
+
+            return {
+              raffle,
+              roles,
+              claimableUsdc: String(claimableUsdc),
+              claimableNative: String(claimableNative),
+              isCreator,
+            } satisfies CashierRaffleItem;
+          })
+        );
+
+        out.push(...results);
+        if (!alive) return out;
+      }
+
+      return out;
+    }
 
     (async () => {
-      setLoading(true);
+      if (!me) {
+        setMode("empty");
+        setNote("Sign in to see your cashier.");
+        setItems([]);
+        return;
+      }
+
       setNote(null);
+      setMode("indexer");
+      setItems(null);
 
       try {
-        const name = await readFirstOr(
-          contract,
-          "name",
-          ["function name() view returns (string)"],
-          "Unknown raffle"
-        );
-
-        const statusU8 = await readFirstOr(
-          contract,
-          "status",
-          ["function status() view returns (uint8)"],
-          255
-        );
-
-        const sold = await readFirstOr(
-          contract,
-          "sold",
-          ["function getSold() view returns (uint256)"],
-          0n
-        );
-
-        const ticketPrice = await readFirstOr(
-          contract,
-          "ticketPrice",
-          ["function ticketPrice() view returns (uint256)"],
-          0n
-        );
-
-        const winningPot = await readFirstOr(
-          contract,
-          "winningPot",
-          ["function winningPot() view returns (uint256)"],
-          0n
-        );
-
-        const minTickets = await readFirstOr(
-          contract,
-          "minTickets",
-          ["function minTickets() view returns (uint64)"],
-          0
-        );
-
-        const maxTickets = await readFirstOr(
-          contract,
-          "maxTickets",
-          ["function maxTickets() view returns (uint64)"],
-          0
-        );
-
-        const deadline = await readFirstOr(
-          contract,
-          "deadline",
-          ["function deadline() view returns (uint64)"],
-          0
-        );
-
-        const paused = await readFirstOr(
-          contract,
-          "paused",
-          ["function paused() view returns (bool)"],
-          false
-        );
-
-        const usdcToken = await readFirstOr(
-          contract,
-          "usdcToken",
-          ["function usdcToken() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
-        );
-
-        const creator = await readFirstOr(
-          contract,
-          "creator",
-          ["function creator() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
-        );
-
-        const winner = await readFirstOr(
-          contract,
-          "winner",
-          ["function winner() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
-        );
-
-        const winningTicketIndex = await readFirstOr(
-          contract,
-          "winningTicketIndex",
-          ["function winningTicketIndex() view returns (uint256)"],
-          0n
-        );
-
-        const feeRecipient = await readFirstOr(
-          contract,
-          "feeRecipient",
-          ["function feeRecipient() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
-        );
-
-        const protocolFeePercent = await readFirstOr(
-          contract,
-          "protocolFeePercent",
-          ["function protocolFeePercent() view returns (uint256)"],
-          0n
-        );
-
-        const ticketRevenue = await readFirstOr(
-          contract,
-          "ticketRevenue",
-          ["function ticketRevenue() view returns (uint256)"],
-          0n
-        );
-
-        const entropyProvider = await readFirstOr(
-          contract,
-          "entropyProvider",
-          ["function entropyProvider() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
-        );
-
-        const entropyRequestId = await readFirstOr(
-          contract,
-          "entropyRequestId",
-          ["function entropyRequestId() view returns (uint64)"],
-          0
-        );
-
-        const selectedProvider = await readFirstOr(
-          contract,
-          "selectedProvider",
-          ["function selectedProvider() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
-        );
-
+        const { merged } = await fetchFromSubgraph();
         if (!alive) return;
 
-        setData({
-          address: normalizedAddress,
-          name: String(name),
-          status: statusFromUint8(Number(statusU8)),
-
-          sold: String(sold),
-          ticketRevenue: String(ticketRevenue),
-
-          ticketPrice: String(ticketPrice),
-          winningPot: String(winningPot),
-
-          minTickets: String(minTickets),
-          maxTickets: String(maxTickets),
-          deadline: String(deadline),
-          paused: Boolean(paused),
-
-          usdcToken: String(usdcToken),
-          creator: String(creator),
-
-          winner: String(winner),
-          winningTicketIndex: String(winningTicketIndex),
-
-          feeRecipient: String(feeRecipient),
-          protocolFeePercent: String(protocolFeePercent),
-
-          entropyProvider: String(entropyProvider),
-          entropyRequestId: String(entropyRequestId),
-          selectedProvider: String(selectedProvider),
-        });
-
-        if (String(name) === "Unknown raffle") {
-          setNote("Some live fields could not be read yet, but the raffle is reachable.");
+        // If no relevant raffles, stop early
+        if (!merged.length) {
+          setItems([]);
+          setNote("No raffles found for your address yet.");
+          return;
         }
-      } catch (e: any) {
+
+        const enriched = await enrichOnChain(merged);
         if (!alive) return;
-        setData(null);
-        setNote("Could not load this raffle right now. Please refresh (and check console logs).");
-      } finally {
+
+        setItems(enriched);
+        setNote(null);
+      } catch {
         if (!alive) return;
-        setLoading(false);
+        setItems([]);
+        setNote("Could not load your cashier right now. Please refresh.");
       }
     })();
 
     return () => {
       alive = false;
+      controller.abort();
     };
-  }, [open, contract, normalizedAddress]);
+  }, [me, limit, refreshKey]);
 
-  return { data, loading, note };
+  return { items, note, mode, refetch };
 }
