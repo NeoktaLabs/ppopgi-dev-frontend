@@ -2,15 +2,10 @@
 import React, { useMemo, useState } from "react";
 import type { RaffleListItem, RaffleStatus } from "../indexer/subgraph";
 import { RaffleCard } from "../components/RaffleCard";
+import { useExploreRaffles } from "../hooks/useExploreRaffles";
 
 // thirdweb source of truth for "my raffles"
 import { useActiveAccount } from "thirdweb/react";
-
-type Props = {
-  items: RaffleListItem[] | null;
-  note: string | null;
-  onOpenRaffle: (id: string) => void;
-};
 
 type SortMode = "endingSoon" | "bigPrize" | "newest";
 
@@ -22,7 +17,9 @@ function isActiveStatus(status: RaffleStatus) {
   return status === "OPEN" || status === "FUNDING_PENDING";
 }
 
-export function ExplorePage({ items, note, onOpenRaffle }: Props) {
+export function ExplorePage() {
+  const { items, note } = useExploreRaffles(500);
+
   const activeAccount = useActiveAccount();
   const me = activeAccount?.address ? norm(activeAccount.address) : null;
 
@@ -45,9 +42,7 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
       filtered = filtered.filter((r) => isActiveStatus(r.status));
     }
 
-    // quick toggle: my raffles
-    // We try creator first (if your subgraph exposes it later),
-    // otherwise fallback to deployer (already in your type).
+    // quick toggle: my raffles (best effort)
     if (myRafflesOnly && me) {
       filtered = filtered.filter((r: any) => {
         const creator = r.creator ? norm(String(r.creator)) : null;
@@ -70,15 +65,14 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
       if (sort === "endingSoon") {
         const A = Number(a.deadline || "0");
         const B = Number(b.deadline || "0");
-        return A - B; // soonest first
+        return A - B;
       }
       if (sort === "bigPrize") {
         const A = BigInt(a.winningPot || "0");
         const B = BigInt(b.winningPot || "0");
         if (A === B) return 0;
-        return A > B ? -1 : 1; // biggest first
+        return A > B ? -1 : 1;
       }
-      // newest (best effort): lastUpdatedTimestamp desc, fallback to id
       const A = Number(a.lastUpdatedTimestamp || "0");
       const B = Number(b.lastUpdatedTimestamp || "0");
       if (A !== B) return B - A;
@@ -87,6 +81,13 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
 
     return sorted;
   }, [items, q, status, sort, openOnly, myRafflesOnly, me]);
+
+  // For now: clicking a card can just alert the address
+  // Later: we can open the same RaffleDetailsModal like Home does.
+  function onOpenRaffle(id: string) {
+    // temporary safe default; replace with your modal open handler later
+    window.alert(id);
+  }
 
   const input: React.CSSProperties = {
     width: "100%",
@@ -120,7 +121,7 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
   };
 
   return (
-    <div style={{ marginTop: 18 }}>
+    <div style={{ padding: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
         <h2 style={{ margin: 0 }}>Explore</h2>
         <div style={{ fontSize: 12, opacity: 0.8 }}>{items ? `${items.length} raffles` : "…"}</div>
@@ -134,11 +135,7 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
 
       {/* Quick toggles */}
       <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button
-          style={openOnly ? pillOn : pill}
-          onClick={() => setOpenOnly((v) => !v)}
-          aria-pressed={openOnly}
-        >
+        <button style={openOnly ? pillOn : pill} onClick={() => setOpenOnly((v) => !v)} aria-pressed={openOnly}>
           Open only
         </button>
 
@@ -205,9 +202,7 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
           </div>
         )}
 
-        {!items && (
-          <div style={{ opacity: 0.85 }}>Loading raffles…</div>
-        )}
+        {!items && <div style={{ opacity: 0.85 }}>Loading raffles…</div>}
       </div>
     </div>
   );
