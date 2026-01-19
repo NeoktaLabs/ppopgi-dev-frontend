@@ -5,6 +5,7 @@ import { SignInModal } from "./components/SignInModal";
 import { DisclaimerGate } from "./components/DisclaimerGate";
 import { CreateRaffleModal } from "./components/CreateRaffleModal";
 import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
+import { RaffleCard } from "./components/RaffleCard";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
 
@@ -13,12 +14,6 @@ import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react
 
 function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
-}
-
-function formatDeadline(seconds: string) {
-  const n = Number(seconds);
-  if (!Number.isFinite(n) || n <= 0) return "Unknown time";
-  return new Date(n * 1000).toLocaleString();
 }
 
 export default function App() {
@@ -55,13 +50,9 @@ export default function App() {
   // ✅ keep Zustand session in sync with thirdweb
   useEffect(() => {
     if (!account) {
-      // if thirdweb disconnected, clear session mirror
       setSession({ account: null, chainId: null, connector: null });
       return;
     }
-
-    // if connected, mirror it
-    // (chainId is set by SignInModal effect; we keep it as-is if not available here)
     setSession({ account, connector: "thirdweb" });
   }, [account, setSession]);
 
@@ -79,7 +70,6 @@ export default function App() {
   }
 
   async function onSignOut() {
-    // ✅ real sign-out must disconnect thirdweb
     try {
       if (activeWallet) disconnect(activeWallet);
     } catch {
@@ -88,13 +78,6 @@ export default function App() {
     clearSession();
     setCreatedHint(null);
   }
-
-  const cardStyle: React.CSSProperties = {
-    padding: 12,
-    border: "1px solid #ddd",
-    borderRadius: 12,
-    cursor: "pointer",
-  };
 
   return (
     <div style={{ padding: 20 }}>
@@ -143,29 +126,7 @@ export default function App() {
         <h3 style={{ margin: 0 }}>Big prizes right now</h3>
         <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
           {bigPrizes.map((r) => (
-            <div
-              key={r.id}
-              style={cardStyle}
-              role="button"
-              tabIndex={0}
-              onClick={() => openRaffle(r.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") openRaffle(r.id);
-              }}
-              title="Open raffle"
-            >
-              <div style={{ fontWeight: 700 }}>{r.name}</div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-                Win: {r.winningPot} USDC • Ticket: {r.ticketPrice} USDC
-              </div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-                Joined: {r.sold}
-                {r.maxTickets !== "0" ? ` • Max: ${r.maxTickets}` : ""}
-              </div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-                Ppopgi fee: {r.protocolFeePercent}%
-              </div>
-            </div>
+            <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
           ))}
           {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
         </div>
@@ -175,25 +136,7 @@ export default function App() {
         <h3 style={{ margin: 0 }}>Ending soon</h3>
         <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
           {endingSoon.map((r) => (
-            <div
-              key={r.id}
-              style={cardStyle}
-              role="button"
-              tabIndex={0}
-              onClick={() => openRaffle(r.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") openRaffle(r.id);
-              }}
-              title="Open raffle"
-            >
-              <div style={{ fontWeight: 700 }}>{r.name}</div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-                Ticket: {r.ticketPrice} USDC
-              </div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-                Ends at: {formatDeadline(r.deadline)}
-              </div>
-            </div>
+            <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
           ))}
           {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
         </div>
