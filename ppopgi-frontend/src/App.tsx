@@ -4,6 +4,7 @@ import { useSession } from "./state/useSession";
 import { SignInModal } from "./components/SignInModal";
 import { DisclaimerGate } from "./components/DisclaimerGate";
 import { CreateRaffleModal } from "./components/CreateRaffleModal";
+import { ETHERLINK_MAINNET } from "./chain/etherlink";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
 
@@ -19,24 +20,41 @@ function formatDeadline(seconds: string) {
 
 export default function App() {
   const account = useSession((s) => s.account);
+  const chainId = useSession((s) => s.chainId);
   const clear = useSession((s) => s.clear);
 
   const [signInOpen, setSignInOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
-
-  // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
+
+  // ✅ small feedback after create
+  const [createdHint, setCreatedHint] = useState<string | null>(null);
 
   useEffect(() => {
     setGateOpen(!hasAcceptedDisclaimer());
   }, []);
+
+  const wrongPlace = !!account && chainId !== ETHERLINK_MAINNET.chainId;
 
   function onAcceptGate() {
     acceptDisclaimer();
     setGateOpen(false);
   }
 
-  const { bigPrizes, endingSoon, note } = useHomeRaffles();
+  // ✅ now we also get refetch
+  const { bigPrizes, endingSoon, note, refetch } = useHomeRaffles();
+
+  function onCreatedRaffle() {
+    // subgraph indexing can be slightly delayed — we refetch immediately,
+    // and show a calm message.
+    setCreatedHint("Raffle created. It may take a moment to appear on the home page.");
+    refetch?.();
+
+    // optional: refetch again after a short delay (often helps Graph indexing)
+    setTimeout(() => {
+      refetch?.();
+    }, 3500);
+  }
 
   return (
     <div style={{ padding: 20 }}>
@@ -48,7 +66,17 @@ export default function App() {
 
         <div style={{ display: "flex", gap: 10 }}>
           <button>Explore</button>
-          <button onClick={() => setCreateOpen(true)}>Create</button>
+
+          {/* ✅ disable Create unless signed in */}
+          <button
+            onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}
+            style={{
+              opacity: account ? 1 : 0.75,
+              cursor: "pointer",
+            }}
+          >
+            Create
+          </button>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -59,11 +87,25 @@ export default function App() {
           ) : (
             <>
               <span>Your account: {short(account)}</span>
-              <button onClick={clear}>Sign out</button>
+              <button
+                onClick={() => {
+                  clear();
+                  setCreatedHint(null);
+                }}
+              >
+                Sign out
+              </button>
             </>
           )}
         </div>
       </div>
+
+      {/* Wrong place notice (keep or remove — your call) */}
+      {wrongPlace && (
+        <div style={{ marginTop: 16, padding: 12, border: "1px solid #ccc", borderRadius: 10 }}>
+          This raffle booth runs on <b>{ETHERLINK_MAINNET.chainName}</b>.
+        </div>
+      )}
 
       {/* Calm fallback note */}
       {note && (
@@ -72,7 +114,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Home sections (read-only) */}
+      {/* ✅ feedback after create */}
+      {createdHint && (
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
+          {createdHint}
+        </div>
+      )}
+
+      {/* Home sections */}
       <div style={{ marginTop: 18 }}>
         <h3 style={{ margin: 0 }}>Big prizes right now</h3>
         <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
@@ -115,7 +164,11 @@ export default function App() {
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
-      <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateRaffleModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={onCreatedRaffle} // ✅ here
+      />
     </div>
   );
 }
