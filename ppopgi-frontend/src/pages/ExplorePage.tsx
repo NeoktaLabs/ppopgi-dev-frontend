@@ -1,161 +1,141 @@
-// src/App.tsx
-import React, { useEffect, useState } from "react";
-import { useSession } from "./state/useSession";
-import { SignInModal } from "./components/SignInModal";
-import { DisclaimerGate } from "./components/DisclaimerGate";
-import { CreateRaffleModal } from "./components/CreateRaffleModal";
-import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
-import { RaffleCard } from "./components/RaffleCard";
-import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
-import { useHomeRaffles } from "./hooks/useHomeRaffles";
+// src/pages/ExplorePage.tsx
+import React, { useMemo, useState } from "react";
+import type { RaffleListItem, RaffleStatus } from "../indexer/subgraph";
+import { RaffleCard } from "../components/RaffleCard";
 
-// ✅ thirdweb is the real connection source
-import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
+type Props = {
+  items: RaffleListItem[] | null;
+  note: string | null;
+  onOpenRaffle: (id: string) => void;
+};
 
-function short(a: string) {
-  return `${a.slice(0, 6)}…${a.slice(-4)}`;
+type SortMode = "endingSoon" | "bigPrize" | "newest";
+
+function norm(s: string) {
+  return s.trim().toLowerCase();
 }
 
-export default function App() {
-  // session is now a mirror only (not source of truth)
-  const setSession = useSession((s) => s.set);
-  const clearSession = useSession((s) => s.clear);
+export function ExplorePage({ items, note, onOpenRaffle }: Props) {
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState<RaffleStatus | "ALL">("ALL");
+  const [sort, setSort] = useState<SortMode>("endingSoon");
 
-  // thirdweb connection (source of truth)
-  const activeAccount = useActiveAccount();
-  const activeWallet = useActiveWallet();
-  const { disconnect } = useDisconnect();
+  const list = useMemo(() => {
+    const all = items ?? [];
 
-  const account = activeAccount?.address ?? null;
+    // filter by status
+    let filtered = status === "ALL" ? all : all.filter((r) => r.status === status);
 
-  const [signInOpen, setSignInOpen] = useState(false);
-  const [gateOpen, setGateOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
-
-  const [createdHint, setCreatedHint] = useState<string | null>(null);
-
-  // raffle details modal state
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [selectedRaffleId, setSelectedRaffleId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setGateOpen(!hasAcceptedDisclaimer());
-  }, []);
-
-  function onAcceptGate() {
-    acceptDisclaimer();
-    setGateOpen(false);
-  }
-
-  // ✅ keep Zustand session in sync with thirdweb
-  useEffect(() => {
-    if (!account) {
-      setSession({ account: null, chainId: null, connector: null });
-      return;
+    // search: name or address
+    const query = norm(q);
+    if (query) {
+      filtered = filtered.filter((r) => {
+        const hay = `${r.name} ${r.id}`.toLowerCase();
+        return hay.includes(query);
+      });
     }
-    setSession({ account, connector: "thirdweb" });
-  }, [account, setSession]);
 
-  const { bigPrizes, endingSoon, note, refetch } = useHomeRaffles();
+    // sort
+    const sorted = [...filtered].sort((a, b) => {
+      if (sort === "endingSoon") {
+        const A = Number(a.deadline || "0");
+        const B = Number(b.deadline || "0");
+        return A - B; // soonest first
+      }
+      if (sort === "bigPrize") {
+        const A = BigInt(a.winningPot || "0");
+        const B = BigInt(b.winningPot || "0");
+        if (A === B) return 0;
+        return A > B ? -1 : 1; // biggest first
+      }
+      // newest (best effort): lastUpdatedTimestamp desc, fallback to id
+      const A = Number(a.lastUpdatedTimestamp || "0");
+      const B = Number(b.lastUpdatedTimestamp || "0");
+      if (A !== B) return B - A;
+      return a.id.localeCompare(b.id);
+    });
 
-  function onCreatedRaffle() {
-    setCreatedHint("Raffle created. It may take a moment to appear on the home page.");
-    refetch();
-    window.setTimeout(() => refetch(), 3500);
-  }
+    return sorted;
+  }, [items, q, status, sort]);
 
-  function openRaffle(id: string) {
-    setSelectedRaffleId(id);
-    setDetailsOpen(true);
-  }
+  const input: React.CSSProperties = {
+    width: "100%",
+    border: "1px solid rgba(255,255,255,0.55)",
+    background: "rgba(255,255,255,0.35)",
+    borderRadius: 12,
+    padding: "10px 10px",
+    outline: "none",
+    color: "#2B2B33",
+  };
 
-  async function onSignOut() {
-    try {
-      if (activeWallet) disconnect(activeWallet);
-    } catch {
-      // ignore
-    }
-    clearSession();
-    setCreatedHint(null);
-  }
+  const select: React.CSSProperties = {
+    ...input,
+    cursor: "pointer",
+  };
 
   return (
-    <div style={{ padding: 20 }}>
-      <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
-
-      {/* Top bar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <b>Ppopgi</b>
-
-        <div style={{ display: "flex", gap: 10 }}>
-          <button>Explore</button>
-
-          <button onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
-            Create
-          </button>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button>Cashier</button>
-
-          {!account ? (
-            <button onClick={() => setSignInOpen(true)}>Sign in</button>
-          ) : (
-            <>
-              <span>Your account: {short(account)}</span>
-              <button onClick={onSignOut}>Sign out</button>
-            </>
-          )}
-        </div>
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+        <h2 style={{ margin: 0 }}>Explore</h2>
+        <div style={{ fontSize: 12, opacity: 0.8 }}>{items ? `${items.length} raffles` : "…"}</div>
       </div>
 
       {note && (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>
+        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
           {note}
         </div>
       )}
 
-      {createdHint && (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
-          {createdHint}
+      {/* Filters */}
+      <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 6 }}>Search</div>
+          <input
+            style={input}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by name or address…"
+          />
         </div>
-      )}
 
-      {/* Home sections */}
-      <div style={{ marginTop: 18 }}>
-        <h3 style={{ margin: 0 }}>Big prizes right now</h3>
-        <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
-          {bigPrizes.map((r) => (
-            <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-          ))}
-          {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 6 }}>Status</div>
+            <select style={select} value={status} onChange={(e) => setStatus(e.target.value as any)}>
+              <option value="ALL">All</option>
+              <option value="FUNDING_PENDING">Getting ready</option>
+              <option value="OPEN">Open</option>
+              <option value="DRAWING">Drawing</option>
+              <option value="COMPLETED">Settled</option>
+              <option value="CANCELED">Canceled</option>
+            </select>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 6 }}>Sort</div>
+            <select style={select} value={sort} onChange={(e) => setSort(e.target.value as SortMode)}>
+              <option value="endingSoon">Ending soon</option>
+              <option value="bigPrize">Big prize</option>
+              <option value="newest">Newest</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      <div style={{ marginTop: 22 }}>
-        <h3 style={{ margin: 0 }}>Ending soon</h3>
-        <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
-          {endingSoon.map((r) => (
-            <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-          ))}
-          {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
-        </div>
+      {/* Results */}
+      <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+        {list.map((r) => (
+          <RaffleCard key={r.id} raffle={r} onOpen={onOpenRaffle} />
+        ))}
+
+        {items && list.length === 0 && (
+          <div style={{ opacity: 0.85 }}>No raffles match your filters.</div>
+        )}
+
+        {!items && (
+          <div style={{ opacity: 0.85 }}>Loading raffles…</div>
+        )}
       </div>
-
-      {/* Modals */}
-      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
-
-      <CreateRaffleModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={onCreatedRaffle}
-      />
-
-      <RaffleDetailsModal
-        open={detailsOpen}
-        raffleId={selectedRaffleId}
-        onClose={() => setDetailsOpen(false)}
-      />
     </div>
   );
 }
