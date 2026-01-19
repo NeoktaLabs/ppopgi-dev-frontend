@@ -1,5 +1,7 @@
+// src/components/RaffleCard.tsx
 import React from "react";
-import type { RaffleListItem } from "../indexer/subgraph";
+import { formatUnits } from "ethers";
+import type { RaffleListItem, RaffleStatus } from "../indexer/subgraph";
 
 type Props = {
   raffle: RaffleListItem;
@@ -10,6 +12,23 @@ function formatDeadline(seconds: string) {
   const n = Number(seconds);
   if (!Number.isFinite(n) || n <= 0) return "Unknown time";
   return new Date(n * 1000).toLocaleString();
+}
+
+function fmtUsdc(raw: string) {
+  try {
+    return formatUnits(BigInt(raw || "0"), 6);
+  } catch {
+    return "0";
+  }
+}
+
+function statusLabel(s: RaffleStatus) {
+  if (s === "FUNDING_PENDING") return "Getting ready";
+  if (s === "OPEN") return "Open";
+  if (s === "DRAWING") return "Drawing";
+  if (s === "COMPLETED") return "Settled";
+  if (s === "CANCELED") return "Canceled";
+  return "Unknown";
 }
 
 export function RaffleCard({ raffle, onOpen }: Props) {
@@ -29,10 +48,13 @@ export function RaffleCard({ raffle, onOpen }: Props) {
       }}
       title="Open raffle"
     >
-      <div style={{ fontWeight: 800 }}>{raffle.name}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ fontWeight: 800 }}>{raffle.name}</div>
+        <div style={{ fontSize: 12, opacity: 0.8 }}>{statusLabel(raffle.status)}</div>
+      </div>
 
       <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Win: {raffle.winningPot} USDC • Ticket: {raffle.ticketPrice} USDC
+        Win: {fmtUsdc(raffle.winningPot)} USDC • Ticket: {fmtUsdc(raffle.ticketPrice)} USDC
       </div>
 
       <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
