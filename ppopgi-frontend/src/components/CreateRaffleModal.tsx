@@ -93,7 +93,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   const durationSecondsN = durV * unitToSeconds(durationUnit);
 
-  // Duration min/max: 5 minutes to 30 days
+  // Duration min/max: 10 minutes to 30 days
   const MIN_DURATION_SECONDS = 5 * 60; // 5 min
   const MAX_DURATION_SECONDS = 30 * 24 * 3600; // 30 days
 
@@ -132,7 +132,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   const durationHint = useMemo(() => {
     if (!durV) return "Choose a duration.";
-    if (durationSecondsN < MIN_DURATION_SECONDS) return "Minimum duration is 5 minutes.";
+    if (durationSecondsN < MIN_DURATION_SECONDS) return "Minimum duration is 10 minutes.";
     if (durationSecondsN > MAX_DURATION_SECONDS) return "Maximum duration is 30 days.";
     const end = new Date(Date.now() + durationSecondsN * 1000);
     return `Ends at: ${end.toLocaleString()}`;
@@ -147,7 +147,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     }
 
     if (!durOk) {
-      setMsg("Duration must be between 5 minutes and 30 days.");
+      setMsg("Duration must be between 10 minutes and 30 days.");
       return;
     }
 
@@ -398,7 +398,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
           </div>
 
           <div>
-            {labelRow("Duration", "How long the raffle stays open. Min 5 minutes, max 30 days.")}
+            {labelRow("Duration", "How long the raffle stays open. Min 10 minutes, max 30 days.")}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
               <input
                 style={input}
