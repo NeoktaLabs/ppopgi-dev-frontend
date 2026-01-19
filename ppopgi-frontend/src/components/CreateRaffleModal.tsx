@@ -13,17 +13,12 @@ import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
 type Props = {
   open: boolean;
   onClose: () => void;
-  onCreated?: () => void; // ✅ lets App refetch home raffles after a creation
+  onCreated?: () => void;
 };
 
 function short(a: string) {
   if (!a) return "—";
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
-}
-
-function toInt(n: string, fallback = 0) {
-  const x = Number(n);
-  return Number.isFinite(x) ? Math.floor(x) : fallback;
 }
 
 type DurationUnit = "minutes" | "hours" | "days";
@@ -34,6 +29,33 @@ function unitToSeconds(unit: DurationUnit): number {
   return 86400;
 }
 
+// ---- integer-only helpers ----
+function clampInt(n: number, min: number, max: number) {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, n));
+}
+
+function sanitizeIntInput(raw: string) {
+  // keep digits only, no commas, no decimals
+  return raw.replace(/[^\d]/g, "");
+}
+
+function toIntStrict(raw: string, fallback = 0) {
+  const s = sanitizeIntInput(raw);
+  if (!s) return fallback;
+  const n = Number(s);
+  return Number.isFinite(n) ? Math.floor(n) : fallback;
+}
+
+// ---- amount helpers (allow decimal dot, but still safe) ----
+function sanitizeDecimalInput(raw: string) {
+  // allow only digits + one dot
+  const cleaned = raw.replace(/[^\d.]/g, "");
+  const parts = cleaned.split(".");
+  if (parts.length <= 1) return cleaned;
+  return `${parts[0]}.${parts.slice(1).join("")}`;
+}
+
 export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const { data, loading, note } = useFactoryConfig(open);
 
@@ -42,56 +64,79 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   // ---------- form state ----------
   const [name, setName] = useState("");
-  const [ticketPrice, setTicketPrice] = useState("1"); // USDC
-  const [winningPot, setWinningPot] = useState("100"); // USDC
-  const [minTickets, setMinTickets] = useState("1");
-  const [maxTickets, setMaxTickets] = useState("1000");
+  const [ticketPrice, setTicketPrice] = useState("1"); // USDC (can be decimal)
+  const [winningPot, setWinningPot] = useState("100"); // USDC (can be decimal)
 
-  // ✅ duration: value + unit
+  // Duration
   const [durationValue, setDurationValue] = useState("24");
   const [durationUnit, setDurationUnit] = useState<DurationUnit>("hours");
 
-  const [minPurchaseAmount, setMinPurchaseAmount] = useState("1"); // tickets per purchase (uint32)
+  // Advanced (default hidden)
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Prefilled advanced defaults:
+  // minTickets=1, maxTickets=unlimited(0), minPurchase=1
+  const [minTickets, setMinTickets] = useState("1");
+  const [maxTickets, setMaxTickets] = useState(""); // empty = unlimited
+  const [minPurchaseAmount, setMinPurchaseAmount] = useState("1");
 
   const [msg, setMsg] = useState<string | null>(null);
 
-  // ✅ no memo needed; cheap and avoids stale-deps issues
   const deployer = getContract({
     client: thirdwebClient,
     chain: ETHERLINK_CHAIN,
     address: ADDRESSES.SingleWinnerDeployer,
   });
 
-  // Basic sanity limits (keeps users from accidentally typing nonsense)
-  const minT = BigInt(toInt(minTickets, 0));
-  const maxT = BigInt(toInt(maxTickets, 0));
+  // ---- parse + validate ----
+  const durV = toIntStrict(durationValue, 0);
 
-  const durV = toInt(durationValue, 0);
-  const durationSecondsN = Math.max(0, durV) * unitToSeconds(durationUnit);
+  const durationSecondsN = durV * unitToSeconds(durationUnit);
 
-  // ✅ allow minutes, but keep it safe (min 1 minute)
-  const minDurationSeconds = 60; // 1 minute
-  const durOk = durationSecondsN >= minDurationSeconds;
+  // Duration min/max: 5 minutes to 30 days
+  const MIN_DURATION_SECONDS = 5 * 60; // 5 min
+  const MAX_DURATION_SECONDS = 30 * 24 * 3600; // 30 days
 
-  const minPurchase = toInt(minPurchaseAmount, 0);
+  const durOk = durationSecondsN >= MIN_DURATION_SECONDS && durationSecondsN <= MAX_DURATION_SECONDS;
+
+  // Advanced numbers (integers only)
+  const minTn = toIntStrict(minTickets, 1);
+  const maxTnRaw = toIntStrict(maxTickets, 0); // if empty => fallback to 0 via sanitizeIntInput
+  const maxTn = maxTickets.trim() === "" ? 0 : maxTnRaw; // 0 means unlimited
+  const minPurchase = toIntStrict(minPurchaseAmount, 1);
+
+  const minT = BigInt(Math.max(1, minTn));
+  const maxT = BigInt(Math.max(0, maxTn));
+  const minPurchaseU32 = Math.max(1, minPurchase);
+
+  const maxTicketsIsUnlimited = maxTn === 0;
+
+  const ticketsOk = (() => {
+    if (maxTicketsIsUnlimited) return true;
+    return maxT >= minT;
+  })();
+
+  const minPurchaseOk = (() => {
+    if (maxTicketsIsUnlimited) return true;
+    return BigInt(minPurchaseU32) <= maxT;
+  })();
 
   const canSubmit =
     !!account?.address &&
     !isPending &&
     name.trim().length > 0 &&
-    minT > 0n &&
-    maxT >= minT &&
     durOk &&
-    minPurchase > 0 &&
-    minPurchase <= Number(maxT);
+    minT > 0n &&
+    ticketsOk &&
+    minPurchaseOk;
 
   const durationHint = useMemo(() => {
     if (!durV) return "Choose a duration.";
-    if (!durOk) return "Minimum duration is 1 minute.";
-    const now = Date.now();
-    const end = new Date(now + durationSecondsN * 1000);
+    if (durationSecondsN < MIN_DURATION_SECONDS) return "Minimum duration is 5 minutes.";
+    if (durationSecondsN > MAX_DURATION_SECONDS) return "Maximum duration is 30 days.";
+    const end = new Date(Date.now() + durationSecondsN * 1000);
     return `Ends at: ${end.toLocaleString()}`;
-  }, [durV, durOk, durationSecondsN]);
+  }, [durV, durationSecondsN]);
 
   async function onCreate() {
     setMsg(null);
@@ -102,35 +147,47 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     }
 
     if (!durOk) {
-      setMsg("Duration must be at least 1 minute.");
+      setMsg("Duration must be between 5 minutes and 30 days.");
+      return;
+    }
+
+    if (!ticketsOk) {
+      setMsg("Max tickets must be ≥ min tickets (or leave max empty for unlimited).");
+      return;
+    }
+
+    if (!minPurchaseOk) {
+      setMsg("Min purchase must be ≤ max tickets (or keep max unlimited).");
       return;
     }
 
     try {
-      // amounts are in USDC (6 decimals)
       const ticketPriceU = parseUnits(ticketPrice || "0", 6);
       const winningPotU = parseUnits(winningPot || "0", 6);
 
-      // uint64 durationSeconds
       const durationSeconds = BigInt(durationSecondsN);
 
       const tx = prepareContractCall({
         contract: deployer,
         method:
           "function createSingleWinnerLottery(string name,uint256 ticketPrice,uint256 winningPot,uint64 minTickets,uint64 maxTickets,uint64 durationSeconds,uint32 minPurchaseAmount) returns (address lotteryAddr)",
-        params: [name.trim(), ticketPriceU, winningPotU, minT, maxT, durationSeconds, minPurchase],
+        params: [
+          name.trim(),
+          ticketPriceU,
+          winningPotU,
+          minT,
+          maxT, // 0 = unlimited
+          durationSeconds,
+          minPurchaseU32,
+        ],
       });
 
       await sendAndConfirm(tx);
 
       setMsg("Raffle created successfully.");
-
-      // ✅ Ask home to refetch (indexer-first with live fallback)
       try {
         onCreated?.();
       } catch {}
-
-      // Optional: close immediately (keeps UX simple)
       onClose();
     } catch (e: any) {
       const m = String(e?.message || "");
@@ -142,7 +199,6 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     }
   }
 
-  // ✅ IMPORTANT: early return must be AFTER all hooks
   if (!open) return null;
 
   const overlay: React.CSSProperties = {
@@ -223,6 +279,31 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     textAlign: "center",
   };
 
+  const help: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 18,
+    height: 18,
+    borderRadius: 999,
+    border: "1px solid rgba(0,0,0,0.18)",
+    background: "rgba(255,255,255,0.55)",
+    fontSize: 12,
+    fontWeight: 900,
+    marginLeft: 6,
+    cursor: "help",
+    userSelect: "none",
+  };
+
+  const labelRow = (text: string, tip: string) => (
+    <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85, display: "flex", alignItems: "center" }}>
+      <span>{text}</span>
+      <span style={help} title={tip} aria-label={tip}>
+        ?
+      </span>
+    </div>
+  );
+
   return (
     <div style={overlay} onMouseDown={onClose}>
       <div style={card} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -255,7 +336,6 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
           <div style={{ fontWeight: 800 }}>Create settings (live)</div>
 
           {loading && <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>Loading create settings…</div>}
-
           {note && <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>{note}</div>}
 
           <div style={row}>
@@ -287,57 +367,114 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
         <div style={section}>
           <div style={{ fontWeight: 800 }}>Raffle details</div>
 
-          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Name</div>
-          <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ppopgi #12" />
+          {labelRow("Name", "Public name shown on the raffle card.")}
+          <input
+            style={input}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Ppopgi #12"
+          />
 
           <div style={grid2}>
             <div>
-              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Ticket price (USDC)</div>
-              <input style={input} value={ticketPrice} onChange={(e) => setTicketPrice(e.target.value)} />
+              {labelRow("Ticket price (USDC)", "Cost per ticket. You can use decimals (e.g. 1.5).")}
+              <input
+                style={input}
+                value={ticketPrice}
+                onChange={(e) => setTicketPrice(sanitizeDecimalInput(e.target.value))}
+                placeholder="e.g. 1"
+              />
             </div>
+
             <div>
-              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Winning pot (USDC)</div>
-              <input style={input} value={winningPot} onChange={(e) => setWinningPot(e.target.value)} />
+              {labelRow("Winning pot (USDC)", "Total prize amount. You can use decimals (e.g. 3.25).")}
+              <input
+                style={input}
+                value={winningPot}
+                onChange={(e) => setWinningPot(sanitizeDecimalInput(e.target.value))}
+                placeholder="e.g. 100"
+              />
             </div>
           </div>
 
-          <div style={grid2}>
-            <div>
-              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Min tickets</div>
-              <input style={input} value={minTickets} onChange={(e) => setMinTickets(e.target.value)} />
+          <div>
+            {labelRow("Duration", "How long the raffle stays open. Min 5 minutes, max 30 days.")}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+              <input
+                style={input}
+                value={durationValue}
+                onChange={(e) => setDurationValue(sanitizeIntInput(e.target.value))}
+                inputMode="numeric"
+                placeholder="e.g. 15"
+              />
+              <select style={selectStyle} value={durationUnit} onChange={(e) => setDurationUnit(e.target.value as any)}>
+                <option value="minutes">minutes</option>
+                <option value="hours">hours</option>
+                <option value="days">days</option>
+              </select>
             </div>
-            <div>
-              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Max tickets</div>
-              <input style={input} value={maxTickets} onChange={(e) => setMaxTickets(e.target.value)} />
-            </div>
+
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>{durationHint}</div>
           </div>
 
-          <div style={grid2}>
-            <div>
-              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Duration</div>
+          {/* Advanced settings */}
+          <div style={{ marginTop: 14 }}>
+            <button
+              style={{
+                border: "1px solid rgba(0,0,0,0.15)",
+                background: "rgba(255,255,255,0.65)",
+                borderRadius: 12,
+                padding: "8px 10px",
+                cursor: "pointer",
+                fontWeight: 800,
+              }}
+              onClick={() => setAdvancedOpen((v) => !v)}
+              type="button"
+            >
+              {advancedOpen ? "Hide advanced settings" : "Advanced settings"}
+            </button>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <input
-                  style={input}
-                  value={durationValue}
-                  onChange={(e) => setDurationValue(e.target.value)}
-                  inputMode="numeric"
-                  placeholder="e.g. 15"
-                />
-                <select style={selectStyle} value={durationUnit} onChange={(e) => setDurationUnit(e.target.value as any)}>
-                  <option value="minutes">minutes</option>
-                  <option value="hours">hours</option>
-                  <option value="days">days</option>
-                </select>
+            {advancedOpen && (
+              <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                <div style={grid2}>
+                  <div>
+                    {labelRow("Min tickets", "Raffle only finalizes after at least this many tickets are sold.")}
+                    <input
+                      style={input}
+                      value={minTickets}
+                      onChange={(e) => setMinTickets(sanitizeIntInput(e.target.value))}
+                      inputMode="numeric"
+                      placeholder="1"
+                    />
+                  </div>
+
+                  <div>
+                    {labelRow("Max tickets", "Optional cap. Leave empty for unlimited.")}
+                    <input
+                      style={input}
+                      value={maxTickets}
+                      onChange={(e) => setMaxTickets(sanitizeIntInput(e.target.value))}
+                      inputMode="numeric"
+                      placeholder="Unlimited"
+                    />
+                    <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+                      {maxTickets.trim() === "" ? "Unlimited" : `Cap: ${maxTickets}`}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  {labelRow("Min purchase (tickets)", "Minimum tickets a user must buy in one purchase.")}
+                  <input
+                    style={input}
+                    value={minPurchaseAmount}
+                    onChange={(e) => setMinPurchaseAmount(sanitizeIntInput(e.target.value))}
+                    inputMode="numeric"
+                    placeholder="1"
+                  />
+                </div>
               </div>
-
-              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>{durationHint}</div>
-            </div>
-
-            <div>
-              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Min purchase (tickets)</div>
-              <input style={input} value={minPurchaseAmount} onChange={(e) => setMinPurchaseAmount(e.target.value)} />
-            </div>
+            )}
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
