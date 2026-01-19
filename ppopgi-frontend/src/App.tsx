@@ -8,12 +8,15 @@ import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
 import { RaffleCard } from "./components/RaffleCard";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
+import { useExploreRaffles } from "./hooks/useExploreRaffles";
 
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
 
 function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
+
+type Page = "home" | "explore";
 
 export default function App() {
   // zustand session is a mirror only
@@ -26,6 +29,8 @@ export default function App() {
   const { disconnect } = useDisconnect();
 
   const account = activeAccount?.address ?? null;
+
+  const [page, setPage] = useState<Page>("home");
 
   const [signInOpen, setSignInOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
@@ -55,12 +60,18 @@ export default function App() {
     setSession({ account, connector: "thirdweb" });
   }, [account, setSession]);
 
-  const { bigPrizes, endingSoon, note, refetch } = useHomeRaffles();
+  const { bigPrizes, endingSoon, note: homeNote, refetch: refetchHome } = useHomeRaffles();
+  const { items: exploreItems, note: exploreNote, refetch: refetchExplore } = useExploreRaffles();
 
   function onCreatedRaffle() {
-    setCreatedHint("Raffle created. It may take a moment to appear on the home page.");
-    refetch();
-    window.setTimeout(() => refetch(), 3500);
+    setCreatedHint("Raffle created. It may take a moment to appear.");
+    // home + explore both should refresh
+    refetchHome();
+    refetchExplore();
+    window.setTimeout(() => {
+      refetchHome();
+      refetchExplore();
+    }, 3500);
   }
 
   function openRaffle(id: string) {
@@ -78,31 +89,64 @@ export default function App() {
     setCreatedHint(null);
   }
 
+  const topBtn: React.CSSProperties = {
+    border: "1px solid rgba(0,0,0,0.15)",
+    background: "rgba(255,255,255,0.65)",
+    borderRadius: 12,
+    padding: "8px 10px",
+    cursor: "pointer",
+  };
+
+  const topBtnActive: React.CSSProperties = {
+    ...topBtn,
+    fontWeight: 800,
+    border: "1px solid rgba(0,0,0,0.28)",
+  };
+
+  const sectionWrap: React.CSSProperties = { marginTop: 18 };
+  const grid: React.CSSProperties = { marginTop: 8, display: "grid", gap: 10 };
+
+  const note = page === "home" ? homeNote : exploreNote;
+
   return (
     <div style={{ padding: 20 }}>
       <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
 
       {/* Top bar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <b>Ppopgi</b>
+        <b style={{ cursor: "pointer" }} onClick={() => setPage("home")}>
+          Ppopgi
+        </b>
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button>Explore</button>
+          <button
+            style={page === "explore" ? topBtnActive : topBtn}
+            onClick={() => setPage("explore")}
+          >
+            Explore
+          </button>
 
-          <button onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
+          <button
+            style={topBtn}
+            onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}
+          >
             Create
           </button>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button>Cashier</button>
+          <button style={topBtn}>Cashier</button>
 
           {!account ? (
-            <button onClick={() => setSignInOpen(true)}>Sign in</button>
+            <button style={topBtn} onClick={() => setSignInOpen(true)}>
+              Sign in
+            </button>
           ) : (
             <>
-              <span>Your account: {short(account)}</span>
-              <button onClick={onSignOut}>Sign out</button>
+              <span style={{ fontSize: 13, opacity: 0.9 }}>Your account: {short(account)}</span>
+              <button style={topBtn} onClick={onSignOut}>
+                Sign out
+              </button>
             </>
           )}
         </div>
@@ -120,26 +164,57 @@ export default function App() {
         </div>
       )}
 
-      {/* Home sections */}
-      <div style={{ marginTop: 18 }}>
-        <h3 style={{ margin: 0 }}>Big prizes right now</h3>
-        <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
-          {bigPrizes.map((r) => (
-            <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-          ))}
-          {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
-        </div>
-      </div>
+      {/* HOME */}
+      {page === "home" && (
+        <>
+          <div style={sectionWrap}>
+            <h3 style={{ margin: 0 }}>Big prizes right now</h3>
+            <div style={grid}>
+              {bigPrizes.map((r) => (
+                <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+              ))}
+              {bigPrizes.length === 0 && (
+                <div style={{ opacity: 0.8 }}>No open raffles right now.</div>
+              )}
+            </div>
+          </div>
 
-      <div style={{ marginTop: 22 }}>
-        <h3 style={{ margin: 0 }}>Ending soon</h3>
-        <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
-          {endingSoon.map((r) => (
-            <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-          ))}
-          {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
+          <div style={{ marginTop: 22 }}>
+            <h3 style={{ margin: 0 }}>Ending soon</h3>
+            <div style={grid}>
+              {endingSoon.map((r) => (
+                <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+              ))}
+              {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* EXPLORE */}
+      {page === "explore" && (
+        <div style={sectionWrap}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ margin: 0 }}>Explore</h3>
+            <button style={topBtn} onClick={() => setPage("home")}>
+              Back to home
+            </button>
+          </div>
+
+          <div style={grid}>
+            {(exploreItems ?? []).map((r) => (
+              <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+            ))}
+
+            {exploreItems && exploreItems.length === 0 && (
+              <div style={{ opacity: 0.8 }}>No raffles to show.</div>
+            )}
+            {!exploreItems && (
+              <div style={{ opacity: 0.8 }}>Loading raffles…</div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
