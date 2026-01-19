@@ -1,11 +1,7 @@
-import { createThirdwebClient } from "thirdweb";
-
-function mustEnv(name: string): string {
-  const v = (import.meta as any).env?.[name];
-  if (!v) throw new Error(`MISSING_ENV_${name}`);
-  return v;
+// src/utils/share.ts
+export function getRaffleShareUrl(raffleId: string) {
+  const base = window.location.origin + window.location.pathname; // no extra params
+  const url = new URL(base);
+  url.searchParams.set("raffle", raffleId);
+  return url.toString();
 }
-
-export const thirdwebClient = createThirdwebClient({
-  clientId: mustEnv("VITE_THIRDWEB_CLIENT_ID"),
-});
