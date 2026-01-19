@@ -36,7 +36,6 @@ export function SignInModal({ open, onClose }: Props) {
 
     setSession({
       account: account.address,
-      chainId: chain?.id ?? null,
       connector: "thirdweb",
     });
 
