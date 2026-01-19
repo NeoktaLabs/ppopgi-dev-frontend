@@ -1,8 +1,15 @@
+// src/components/SignInModal.tsx
 import React, { useEffect } from "react";
 import { ETHERLINK_MAINNET } from "../chain/etherlink";
 import { useSession } from "../state/useSession";
 
-import { ConnectEmbed, useActiveAccount, useActiveWalletChain, useDisconnect } from "thirdweb/react";
+import {
+  ConnectEmbed,
+  useActiveAccount,
+  useActiveWallet,
+  useActiveWalletChain,
+  useDisconnect,
+} from "thirdweb/react";
 import { createWallet } from "thirdweb/wallets";
 
 import { thirdwebClient } from "../thirdweb/client";
@@ -16,12 +23,13 @@ type Props = {
 export function SignInModal({ open, onClose }: Props) {
   const setSession = useSession((s) => s.set);
 
-  // thirdweb state (source of truth for connection)
+  // thirdweb state (source of truth)
   const account = useActiveAccount();
+  const wallet = useActiveWallet();
   const chain = useActiveWalletChain();
-  const disconnect = useDisconnect();
+  const { disconnect } = useDisconnect();
 
-  // keep your app session in sync for UI
+  // Keep app session in sync for UI
   useEffect(() => {
     if (!open) return;
     if (!account?.address) return;
@@ -32,8 +40,8 @@ export function SignInModal({ open, onClose }: Props) {
       connector: "thirdweb",
     });
 
-    // close modal once connected
     onClose();
+    // we intentionally only close on address change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.address]);
 
@@ -90,17 +98,17 @@ export function SignInModal({ open, onClose }: Props) {
           Choose how you want to sign in. This raffle booth runs on <b>{ETHERLINK_MAINNET.chainName}</b>.
         </p>
 
-        {/* thirdweb connect UI */}
         <div style={{ marginTop: 14 }}>
           <ConnectEmbed
             client={thirdwebClient}
             chain={ETHERLINK_CHAIN}
+            autoConnect={false}
             wallets={[
               // MetaMask first
               createWallet("io.metamask"),
-              // Then a broad connector that supports many wallets (QR included)
+              // WalletConnect (QR, many wallets)
               createWallet("walletConnect"),
-              // Then injected wallets (Brave, Coinbase extension, etc.)
+              // Injected (Brave, Coinbase extension, etc.)
               createWallet("injected"),
             ]}
           />
@@ -108,7 +116,6 @@ export function SignInModal({ open, onClose }: Props) {
 
         <div style={note}>Nothing happens automatically. You always confirm actions yourself.</div>
 
-        {/* optional: allow disconnect from inside modal if you want */}
         <div style={{ marginTop: 10 }}>
           <button
             style={{
@@ -119,7 +126,9 @@ export function SignInModal({ open, onClose }: Props) {
               cursor: "pointer",
               color: "#2B2B33",
             }}
-            onClick={() => disconnect()}
+            onClick={() => {
+              if (wallet) disconnect(wallet);
+            }}
           >
             Sign out
           </button>
