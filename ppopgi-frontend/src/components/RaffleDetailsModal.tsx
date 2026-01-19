@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { formatUnits } from "ethers";
 import { useRaffleDetails } from "../hooks/useRaffleDetails";
-import { SafetyProofModal } from "./SafetyProofModal";
 
 import { getContract, prepareContractCall, readContract } from "thirdweb";
 import { thirdwebClient } from "../thirdweb/client";
@@ -50,6 +49,17 @@ function toInt(v: string, fallback = 0) {
   return Number.isFinite(n) ? Math.floor(n) : fallback;
 }
 
+function clampInt(n: number, min: number, max: number) {
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, Math.floor(n)));
+}
+
+// ✅ take leading integer only (prevents "1.5" => 15, "1,5" => 15)
+function cleanIntInput(v: string) {
+  const m = v.match(/^\s*(\d+)/);
+  return m ? m[1] : "";
+}
+
 function isZeroAddr(a?: string | null) {
   if (!a) return true;
   return a.toLowerCase() === "0x0000000000000000000000000000000000000000";
@@ -57,6 +67,8 @@ function isZeroAddr(a?: string | null) {
 
 export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   const { data, loading, note } = useRaffleDetails(raffleId, open);
+
+  // ✅ no nested modal: safety becomes an in-modal panel
   const [safetyOpen, setSafetyOpen] = useState(false);
 
   // ✅ thirdweb is the source of truth
@@ -128,7 +140,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   }
 
   function openShare(url: string) {
-    // keep it simple + reliable
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
@@ -159,12 +170,30 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     setTickets("1");
     setBuyMsg(null);
     setCopyMsg(null);
+    setSafetyOpen(false);
   }, [open, raffleId]);
 
-  // --- compute purchase cost
-  const ticketCount = Math.max(0, toInt(tickets, 0));
+  // --- compute purchase cost (ticketCount will be clamped further below)
   const ticketPriceU = data ? BigInt(data.ticketPrice) : 0n;
+
+  // ---------- ticket input bounds (UX-safe) ----------
+  const soldNow = data ? Number(data.sold || "0") : 0;
+  const maxTicketsN = data ? Number(data.maxTickets || "0") : 0;
+
+  // if maxTickets == "0" we treat as unlimited; still keep a UX cap
+  const hardCap = 500;
+  const remaining =
+    data && maxTicketsN > 0 ? Math.max(0, maxTicketsN - soldNow) : hardCap;
+
+  const minBuy = 1;
+  const maxBuy = Math.max(minBuy, remaining);
+
+  const ticketCount = clampInt(toInt(tickets, 1), minBuy, maxBuy);
   const totalCostU = BigInt(ticketCount) * ticketPriceU;
+
+  function setTicketsSafe(next: number) {
+    setTickets(String(clampInt(next, minBuy, maxBuy)));
+  }
 
   async function refreshAllowance() {
     if (!open) return;
@@ -402,6 +431,16 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     opacity: 0.55,
   };
 
+  const chip: React.CSSProperties = {
+    border: "1px solid rgba(0,0,0,0.15)",
+    background: "rgba(255,255,255,0.65)",
+    borderRadius: 999,
+    padding: "6px 10px",
+    fontWeight: 800,
+    fontSize: 12,
+    color: "#2B2B33",
+  };
+
   return (
     <div style={overlay} onMouseDown={onClose}>
       <div style={card} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -409,17 +448,11 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           <div>
             <div style={{ fontSize: 12, opacity: 0.85 }}>Raffle</div>
             <div style={{ fontSize: 18, fontWeight: 800 }}>{data?.name ?? "Loading…"}</div>
-            {raffleId ? (
-              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>{raffleId}</div>
-            ) : null}
-
-            {copyMsg && (
-              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>{copyMsg}</div>
-            )}
+            {raffleId ? <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>{raffleId}</div> : null}
+            {copyMsg && <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>{copyMsg}</div>}
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {/* ✅ Social share buttons are back */}
             <button
               onClick={onCopyLink}
               disabled={!shareUrl}
@@ -465,13 +498,15 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
               WhatsApp
             </button>
 
+            {/* ✅ shield-style toggle (no nested modal) */}
             <button
-              onClick={() => data && setSafetyOpen(true)}
+              onClick={() => setSafetyOpen((v) => !v)}
               disabled={!data}
               style={data ? miniBtn : miniBtnDisabled}
               title="Safety info"
+              aria-expanded={safetyOpen}
             >
-              Safety info
+              🛡️ Safety
             </button>
 
             <button onClick={onClose} style={miniBtn} title="Close">
@@ -480,10 +515,50 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           </div>
         </div>
 
-        {loading && (
-          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Loading live details…</div>
-        )}
+        {loading && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Loading live details…</div>}
         {note && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{note}</div>}
+
+        {/* ✅ Safety panel (in-modal) */}
+        {data && safetyOpen && (
+          <div style={section} role="region" aria-label="Safety info">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div style={{ fontWeight: 900 }}>Safety info</div>
+              <button
+                style={{
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  background: "rgba(255,255,255,0.55)",
+                  borderRadius: 999,
+                  padding: "6px 10px",
+                  cursor: "pointer",
+                  fontWeight: 800,
+                  fontSize: 12,
+                }}
+                onClick={() => setSafetyOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={chip}>Network truth</span>
+              <span style={chip}>No auto-actions</span>
+              <span style={chip}>You confirm transactions</span>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9, lineHeight: 1.4 }}>
+              The app only reads what the contract says and prepares transactions for you to confirm.
+              If something is not claimable/withdrawable, it will fail on-chain.
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9, lineHeight: 1.4 }}>
+              <b>Raffle address:</b> {raffleId}
+              <br />
+              <b>USDC token:</b> {data.usdcToken || ADDRESSES.USDC}
+              <br />
+              <b>Fee receiver:</b> {data.feeRecipient}
+            </div>
+          </div>
+        )}
 
         {data && (
           <>
@@ -505,9 +580,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                 </div>
               </div>
               {data.paused && (
-                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-                  This raffle is paused right now.
-                </div>
+                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>This raffle is paused right now.</div>
               )}
             </div>
 
@@ -536,19 +609,45 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
               <div style={{ fontWeight: 800 }}>Join</div>
 
               {raffleNotJoinableReason && (
-                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>
-                  {raffleNotJoinableReason}
-                </div>
+                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>{raffleNotJoinableReason}</div>
               )}
 
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>How many tickets</div>
-              <input
-                style={input}
-                value={tickets}
-                onChange={(e) => setTickets(e.target.value)}
-                placeholder="e.g. 3"
-                inputMode="numeric"
-              />
+
+              {/* ✅ integer-only stepper + locked input */}
+              <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 44px", gap: 10, marginTop: 8 }}>
+                <button
+                  style={ticketCount > minBuy ? btnEnabled : btnDisabled}
+                  disabled={ticketCount <= minBuy}
+                  onClick={() => setTicketsSafe(ticketCount - 1)}
+                  type="button"
+                >
+                  −
+                </button>
+
+                <input
+                  style={input}
+                  value={tickets}
+                  onChange={(e) => setTickets(cleanIntInput(e.target.value))}
+                  onBlur={() => setTicketsSafe(toInt(tickets, 1))}
+                  placeholder="1"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                />
+
+                <button
+                  style={ticketCount < maxBuy ? btnEnabled : btnDisabled}
+                  disabled={ticketCount >= maxBuy}
+                  onClick={() => setTicketsSafe(ticketCount + 1)}
+                  type="button"
+                >
+                  +
+                </button>
+              </div>
+
+              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
+                Min: {minBuy} • Max: {maxBuy}
+              </div>
 
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
                 Total cost: <b>{fmtUsdc(totalCostU.toString())} USDC</b>
@@ -561,9 +660,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                   ) : (
                     <>
                       {usdcBal !== null ? `Your coins: ${fmtUsdc(usdcBal.toString())} USDC • ` : ""}
-                      {allowance !== null
-                        ? `Allowed for this raffle: ${fmtUsdc(allowance.toString())} USDC`
-                        : ""}
+                      {allowance !== null ? `Allowed for this raffle: ${fmtUsdc(allowance.toString())} USDC` : ""}
                     </>
                   )}
                 </div>
@@ -580,9 +677,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
               </button>
 
               {!hasEnoughBalance && (
-                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-                  Not enough USDC for this purchase.
-                </div>
+                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>Not enough USDC for this purchase.</div>
               )}
 
               {canShowWinner && data.winner && !isZeroAddr(data.winner) && (
@@ -624,10 +719,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
               </div>
             )}
           </>
-        )}
-
-        {data && (
-          <SafetyProofModal open={safetyOpen} onClose={() => setSafetyOpen(false)} raffle={data} />
         )}
       </div>
     </div>
