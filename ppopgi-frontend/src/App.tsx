@@ -9,9 +9,7 @@ import { RaffleCard } from "./components/RaffleCard";
 import { CashierModal } from "./components/CashierModal";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
-
 import { ExplorePage } from "./pages/ExplorePage";
-
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
 
 function short(a: string) {
@@ -20,22 +18,38 @@ function short(a: string) {
 
 type Page = "home" | "explore";
 
-function getRaffleFromUrl(): string | null {
+function extractAddress(input: string): string | null {
+  if (!input) return null;
+  const m = input.match(/0x[a-fA-F0-9]{40}/);
+  return m ? m[0] : null;
+}
+
+function getRaffleFromQuery(): string | null {
   try {
     const url = new URL(window.location.href);
-    const r = url.searchParams.get("raffle");
-    return r && r.trim() ? r.trim() : null;
+    const v = url.searchParams.get("raffle");
+    const addr = extractAddress(v || "");
+    return addr;
   } catch {
     return null;
   }
 }
 
-function setRaffleInUrl(id: string | null) {
+function setRaffleQuery(id: string | null) {
   try {
     const url = new URL(window.location.href);
-    if (!id) url.searchParams.delete("raffle");
-    else url.searchParams.set("raffle", id);
-    window.history.replaceState({}, "", url.toString());
+
+    // ✅ keep ONLY raffle param (and no hash)
+    url.hash = "";
+
+    if (!id) {
+      url.search = "";
+    } else {
+      url.search = "";
+      url.searchParams.set("raffle", id);
+    }
+
+    window.history.pushState({}, "", url.toString());
   } catch {
     // ignore
   }
@@ -88,29 +102,47 @@ export default function App() {
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear.");
     refetchHome();
-    window.setTimeout(() => {
-      refetchHome();
-    }, 3500);
+    window.setTimeout(() => refetchHome(), 3500);
   }
 
   function openRaffle(id: string) {
-    setSelectedRaffleId(id);
+    const addr = extractAddress(id) ?? id;
+    setSelectedRaffleId(addr);
     setDetailsOpen(true);
-    setRaffleInUrl(id);
+
+    // ✅ reflect in URL as ?raffle=0x...
+    setRaffleQuery(addr);
   }
 
   function closeRaffle() {
     setDetailsOpen(false);
-    setRaffleInUrl(null);
+    setSelectedRaffleId(null);
+
+    // ✅ remove query param
+    setRaffleQuery(null);
   }
 
-  // ✅ Auto-open from shared link: ?raffle=0x...
+  // ✅ Auto-open from URL (?raffle=0x...)
   useEffect(() => {
-    const fromUrl = getRaffleFromUrl();
-    if (fromUrl) {
-      setSelectedRaffleId(fromUrl);
+    const fromQuery = getRaffleFromQuery();
+    if (fromQuery) {
+      setSelectedRaffleId(fromQuery);
       setDetailsOpen(true);
     }
+
+    const onPop = () => {
+      const p = getRaffleFromQuery();
+      if (p) {
+        setSelectedRaffleId(p);
+        setDetailsOpen(true);
+      } else {
+        setDetailsOpen(false);
+        setSelectedRaffleId(null);
+      }
+    };
+
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
   }, []);
 
   async function onSignOut() {
@@ -151,17 +183,11 @@ export default function App() {
         </b>
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button
-            style={page === "explore" ? topBtnActive : topBtn}
-            onClick={() => setPage("explore")}
-          >
+          <button style={page === "explore" ? topBtnActive : topBtn} onClick={() => setPage("explore")}>
             Explore
           </button>
 
-          <button
-            style={topBtn}
-            onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}
-          >
+          <button style={topBtn} onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
             Create
           </button>
         </div>
@@ -188,16 +214,10 @@ export default function App() {
 
       {/* Home-only note (ExplorePage shows its own note inside) */}
       {page === "home" && homeNote && (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>
-          {homeNote}
-        </div>
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>{homeNote}</div>
       )}
 
-      {createdHint && (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
-          {createdHint}
-        </div>
-      )}
+      {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>{createdHint}</div>}
 
       {/* HOME */}
       {page === "home" && (
@@ -208,9 +228,7 @@ export default function App() {
               {bigPrizes.map((r) => (
                 <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
               ))}
-              {bigPrizes.length === 0 && (
-                <div style={{ opacity: 0.8 }}>No open raffles right now.</div>
-              )}
+              {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
             </div>
           </div>
 
@@ -220,9 +238,7 @@ export default function App() {
               {endingSoon.map((r) => (
                 <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
               ))}
-              {endingSoon.length === 0 && (
-                <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>
-              )}
+              {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
             </div>
           </div>
         </>
@@ -233,24 +249,11 @@ export default function App() {
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
+      <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
 
-      <CreateRaffleModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={onCreatedRaffle}
-      />
+      <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
 
-      <RaffleDetailsModal
-        open={detailsOpen}
-        raffleId={selectedRaffleId}
-        onClose={closeRaffle}
-      />
-
-      <CashierModal
-        open={cashierOpen}
-        onClose={() => setCashierOpen(false)}
-        onOpenRaffle={openRaffle}
-      />
+      <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} onOpenRaffle={openRaffle} />
     </div>
   );
 }
