@@ -29,6 +29,7 @@ export type RaffleDetails = {
   status: RaffleStatus;
 
   sold: string;
+  ticketRevenue: string;
 
   ticketPrice: string; // uint256 raw (USDC 6 decimals)
   winningPot: string; // uint256 raw (USDC 6 decimals)
@@ -47,18 +48,21 @@ export type RaffleDetails = {
   feeRecipient: string;
   protocolFeePercent: string;
 
-  // ✅ for SafetyProofModal (present in your ABI)
-  ticketRevenue: string; // uint256
-  entropyProvider: string; // address
-  entropyRequestId: string; // uint64
-  selectedProvider: string; // address
+  entropyProvider: string;
+  entropyRequestId: string;
+  selectedProvider: string;
 };
 
-async function readFirst(contract: any, label: string, candidates: string[]): Promise<any> {
+async function readFirst(
+  contract: any,
+  label: string,
+  candidates: string[],
+  params: readonly unknown[] = []
+): Promise<any> {
   let lastErr: any = null;
   for (const method of candidates) {
     try {
-      return await readContract({ contract, method });
+      return await readContract({ contract, method, params });
     } catch (e) {
       lastErr = e;
     }
@@ -68,9 +72,15 @@ async function readFirst(contract: any, label: string, candidates: string[]): Pr
   throw lastErr;
 }
 
-async function readFirstOr(contract: any, label: string, candidates: string[], fallback: any): Promise<any> {
+async function readFirstOr(
+  contract: any,
+  label: string,
+  candidates: string[],
+  fallback: any,
+  params: readonly unknown[] = []
+): Promise<any> {
   try {
-    return await readFirst(contract, label, candidates);
+    return await readFirst(contract, label, candidates, params);
   } catch {
     return fallback;
   }
@@ -109,50 +119,138 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
       setNote(null);
 
       try {
-        // ✅ ABI-backed reads
-        const [
-          name,
-          statusU8,
-          sold,
-          ticketPrice,
-          winningPot,
-          minTickets,
-          maxTickets,
-          deadline,
-          paused,
-          usdcToken,
-          creator,
-          winner,
-          winningTicketIndex,
-          feeRecipient,
-          protocolFeePercent,
-          ticketRevenue,
-          entropyProvider,
-          entropyRequestId,
-          selectedProvider,
-        ] = await Promise.all([
-          readFirstOr(contract, "name", ["function name() view returns (string)"], "Unknown raffle"),
-          readFirstOr(contract, "status", ["function status() view returns (uint8)"], 255),
-          readFirstOr(contract, "sold", ["function getSold() view returns (uint256)"], 0n),
-          readFirstOr(contract, "ticketPrice", ["function ticketPrice() view returns (uint256)"], 0n),
-          readFirstOr(contract, "winningPot", ["function winningPot() view returns (uint256)"], 0n),
-          readFirstOr(contract, "minTickets", ["function minTickets() view returns (uint64)"], 0),
-          readFirstOr(contract, "maxTickets", ["function maxTickets() view returns (uint64)"], 0),
-          readFirstOr(contract, "deadline", ["function deadline() view returns (uint64)"], 0),
-          readFirstOr(contract, "paused", ["function paused() view returns (bool)"], false),
-          readFirstOr(contract, "usdcToken", ["function usdcToken() view returns (address)"], "0x0000000000000000000000000000000000000000"),
-          readFirstOr(contract, "creator", ["function creator() view returns (address)"], "0x0000000000000000000000000000000000000000"),
-          readFirstOr(contract, "winner", ["function winner() view returns (address)"], "0x0000000000000000000000000000000000000000"),
-          readFirstOr(contract, "winningTicketIndex", ["function winningTicketIndex() view returns (uint256)"], 0n),
-          readFirstOr(contract, "feeRecipient", ["function feeRecipient() view returns (address)"], "0x0000000000000000000000000000000000000000"),
-          readFirstOr(contract, "protocolFeePercent", ["function protocolFeePercent() view returns (uint256)"], 0n),
+        const name = await readFirstOr(
+          contract,
+          "name",
+          ["function name() view returns (string)"],
+          "Unknown raffle"
+        );
 
-          // ✅ SafetyProofModal fields (present in your ABI)
-          readFirstOr(contract, "ticketRevenue", ["function ticketRevenue() view returns (uint256)"], 0n),
-          readFirstOr(contract, "entropyProvider", ["function entropyProvider() view returns (address)"], "0x0000000000000000000000000000000000000000"),
-          readFirstOr(contract, "entropyRequestId", ["function entropyRequestId() view returns (uint64)"], 0),
-          readFirstOr(contract, "selectedProvider", ["function selectedProvider() view returns (address)"], "0x0000000000000000000000000000000000000000"),
-        ]);
+        const statusU8 = await readFirstOr(
+          contract,
+          "status",
+          ["function status() view returns (uint8)"],
+          255
+        );
+
+        const sold = await readFirstOr(
+          contract,
+          "sold",
+          ["function getSold() view returns (uint256)"],
+          0n
+        );
+
+        const ticketPrice = await readFirstOr(
+          contract,
+          "ticketPrice",
+          ["function ticketPrice() view returns (uint256)"],
+          0n
+        );
+
+        const winningPot = await readFirstOr(
+          contract,
+          "winningPot",
+          ["function winningPot() view returns (uint256)"],
+          0n
+        );
+
+        const minTickets = await readFirstOr(
+          contract,
+          "minTickets",
+          ["function minTickets() view returns (uint64)"],
+          0
+        );
+
+        const maxTickets = await readFirstOr(
+          contract,
+          "maxTickets",
+          ["function maxTickets() view returns (uint64)"],
+          0
+        );
+
+        const deadline = await readFirstOr(
+          contract,
+          "deadline",
+          ["function deadline() view returns (uint64)"],
+          0
+        );
+
+        const paused = await readFirstOr(
+          contract,
+          "paused",
+          ["function paused() view returns (bool)"],
+          false
+        );
+
+        const usdcToken = await readFirstOr(
+          contract,
+          "usdcToken",
+          ["function usdcToken() view returns (address)"],
+          "0x0000000000000000000000000000000000000000"
+        );
+
+        const creator = await readFirstOr(
+          contract,
+          "creator",
+          ["function creator() view returns (address)"],
+          "0x0000000000000000000000000000000000000000"
+        );
+
+        const winner = await readFirstOr(
+          contract,
+          "winner",
+          ["function winner() view returns (address)"],
+          "0x0000000000000000000000000000000000000000"
+        );
+
+        const winningTicketIndex = await readFirstOr(
+          contract,
+          "winningTicketIndex",
+          ["function winningTicketIndex() view returns (uint256)"],
+          0n
+        );
+
+        const feeRecipient = await readFirstOr(
+          contract,
+          "feeRecipient",
+          ["function feeRecipient() view returns (address)"],
+          "0x0000000000000000000000000000000000000000"
+        );
+
+        const protocolFeePercent = await readFirstOr(
+          contract,
+          "protocolFeePercent",
+          ["function protocolFeePercent() view returns (uint256)"],
+          0n
+        );
+
+        const ticketRevenue = await readFirstOr(
+          contract,
+          "ticketRevenue",
+          ["function ticketRevenue() view returns (uint256)"],
+          0n
+        );
+
+        const entropyProvider = await readFirstOr(
+          contract,
+          "entropyProvider",
+          ["function entropyProvider() view returns (address)"],
+          "0x0000000000000000000000000000000000000000"
+        );
+
+        const entropyRequestId = await readFirstOr(
+          contract,
+          "entropyRequestId",
+          ["function entropyRequestId() view returns (uint64)"],
+          0
+        );
+
+        const selectedProvider = await readFirstOr(
+          contract,
+          "selectedProvider",
+          ["function selectedProvider() view returns (address)"],
+          "0x0000000000000000000000000000000000000000"
+        );
 
         if (!alive) return;
 
@@ -162,6 +260,8 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           status: statusFromUint8(Number(statusU8)),
 
           sold: String(sold),
+          ticketRevenue: String(ticketRevenue),
+
           ticketPrice: String(ticketPrice),
           winningPot: String(winningPot),
 
@@ -179,7 +279,6 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           feeRecipient: String(feeRecipient),
           protocolFeePercent: String(protocolFeePercent),
 
-          ticketRevenue: String(ticketRevenue),
           entropyProvider: String(entropyProvider),
           entropyRequestId: String(entropyRequestId),
           selectedProvider: String(selectedProvider),
@@ -188,7 +287,7 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
         if (String(name) === "Unknown raffle") {
           setNote("Some live fields could not be read yet, but the raffle is reachable.");
         }
-      } catch {
+      } catch (e: any) {
         if (!alive) return;
         setData(null);
         setNote("Could not load this raffle right now. Please refresh (and check console logs).");
