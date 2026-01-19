@@ -20,7 +20,6 @@ function formatDeadline(seconds: string) {
 
 export default function App() {
   const account = useSession((s) => s.account);
-  const chainId = useSession((s) => s.chainId);
   const clear = useSession((s) => s.clear);
 
   const [signInOpen, setSignInOpen] = useState(false);
@@ -33,8 +32,6 @@ export default function App() {
   useEffect(() => {
     setGateOpen(!hasAcceptedDisclaimer());
   }, []);
-
-  const wrongPlace = !!account && chainId !== ETHERLINK_MAINNET.chainId;
 
   function onAcceptGate() {
     acceptDisclaimer();
