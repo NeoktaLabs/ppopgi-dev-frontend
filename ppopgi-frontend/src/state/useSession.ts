@@ -6,7 +6,6 @@ export type Connector = "thirdweb" | null;
 
 export type SessionState = {
   account: string | null;
-  chainId: number | null;
   connector: Connector;
 
   set: (s: Partial<SessionState>) => void;
@@ -17,7 +16,6 @@ export const useSession = create<SessionState>()(
   persist(
     (set) => ({
       account: null,
-      chainId: null,
       connector: null,
 
       set: (s) => set(s),
@@ -25,16 +23,13 @@ export const useSession = create<SessionState>()(
       clear: () =>
         set({
           account: null,
-          chainId: null,
           connector: null,
         }),
     }),
     {
       name: "ppopgi-session",
-      // ✅ Return only a subset (Zustand persists partial state)
       partialize: (s) => ({
         account: s.account,
-        chainId: s.chainId,
         connector: s.connector,
       }),
     }
