@@ -74,6 +74,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [allowLoading, setAllowLoading] = useState(false);
 
+  // ✅ Copy link feedback (tiny inline message; no other UI changes)
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+
   const canShowWinner = useMemo(() => data?.status === "COMPLETED", [data?.status]);
 
   const raffleIsOpen = !!data && data.status === "OPEN" && !data.paused;
@@ -105,11 +108,31 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     });
   }, [data?.usdcToken]);
 
+  // ✅ Copy link (always ONLY ?raffle=0x... — no title/text in URL)
+  async function onCopyLink() {
+    if (!raffleId) return;
+
+    const u = new URL(window.location.href);
+    u.search = `?raffle=${raffleId}`;
+    const url = u.toString();
+
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyMsg("Link copied.");
+      window.setTimeout(() => setCopyMsg(null), 1200);
+    } catch {
+      window.prompt("Copy this link:", url);
+      setCopyMsg("Copy the link.");
+      window.setTimeout(() => setCopyMsg(null), 1200);
+    }
+  }
+
   // Reset ticket input + messages when opening a new raffle
   useEffect(() => {
     if (!open) return;
     setTickets("1");
     setBuyMsg(null);
+    setCopyMsg(null);
   }, [open, raffleId]);
 
   // --- compute purchase cost
@@ -349,9 +372,32 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
             {raffleId ? (
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>{raffleId}</div>
             ) : null}
+
+            {/* ✅ Copy link feedback */}
+            {copyMsg && (
+              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                {copyMsg}
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
+            {/* ✅ Copy link button (only addition) */}
+            <button
+              onClick={onCopyLink}
+              disabled={!raffleId}
+              style={{
+                border: "1px solid rgba(255,255,255,0.5)",
+                background: "rgba(255,255,255,0.25)",
+                borderRadius: 12,
+                padding: "8px 10px",
+                cursor: raffleId ? "pointer" : "not-allowed",
+                opacity: raffleId ? 1 : 0.55,
+              }}
+            >
+              Copy link
+            </button>
+
             <button
               onClick={() => data && setSafetyOpen(true)}
               disabled={!data}
