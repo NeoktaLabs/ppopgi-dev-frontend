@@ -14,47 +14,41 @@ function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
-function safeBigInt(x: string | number | bigint | null | undefined) {
+function statusLabel(s: string) {
+  if (s === "FUNDING_PENDING") return "Getting ready";
+  if (s === "OPEN") return "Open";
+  if (s === "DRAWING") return "Drawing";
+  if (s === "COMPLETED") return "Settled";
+  if (s === "CANCELED") return "Canceled";
+  return "Unknown";
+}
+
+function safeBigInt(x: string) {
   try {
-    if (typeof x === "bigint") return x;
-    if (typeof x === "number") return BigInt(x);
-    if (!x) return 0n;
-    return BigInt(String(x));
+    return BigInt(x);
   } catch {
     return 0n;
   }
 }
 
-function fmtUsdcRaw(raw: string | bigint) {
+function fmtUsdcRaw(raw: bigint) {
   try {
-    const v = typeof raw === "bigint" ? raw : BigInt(raw);
-    return formatUnits(v, 6);
+    return formatUnits(raw, 6);
   } catch {
     return "0";
   }
 }
 
-// Contract enum is uint8; typical mapping is:
-// 0 FUNDING_PENDING, 1 OPEN, 2 DRAWING, 3 COMPLETED, 4 CANCELED
-function statusLabelFromUint8(s: number) {
-  if (s === 0) return "Getting ready";
-  if (s === 1) return "Open";
-  if (s === 2) return "Drawing";
-  if (s === 3) return "Settled";
-  if (s === 4) return "Canceled";
-  return "Unknown";
-}
-
 export function SafetyProofModal({ open, onClose, raffle }: Props) {
   const breakdown = useMemo(() => {
-    const revenue = safeBigInt(raffle.ticketRevenue);
-    const pot = safeBigInt(raffle.winningPot);
-    const pct = safeBigInt(raffle.protocolFeePercent);
+    const revenue = safeBigInt(raffle.ticketRevenue ?? "0");
+    const pot = safeBigInt(raffle.winningPot ?? "0");
+    const pct = safeBigInt(raffle.protocolFeePercent ?? "0");
 
     // fee = revenue * pct / 100
     const fee = (revenue * pct) / 100n;
 
-    // creator share (so far) = revenue - pot - fee (clamped)
+    // creator share "so far" = revenue - pot - fee (clamp to 0)
     let creatorSoFar = revenue - pot - fee;
     if (creatorSoFar < 0n) creatorSoFar = 0n;
 
@@ -62,6 +56,8 @@ export function SafetyProofModal({ open, onClose, raffle }: Props) {
   }, [raffle]);
 
   if (!open) return null;
+
+  const isDrawing = raffle.status === "DRAWING";
 
   const overlay: React.CSSProperties = {
     position: "fixed",
@@ -104,9 +100,7 @@ export function SafetyProofModal({ open, onClose, raffle }: Props) {
   };
 
   const label: React.CSSProperties = { opacity: 0.85 };
-  const value: React.CSSProperties = { fontWeight: 700 };
-
-  const isDrawing = raffle.status === 2;
+  const value: React.CSSProperties = { fontWeight: 700, textAlign: "right" as const };
 
   return (
     <div style={overlay} onMouseDown={onClose}>
@@ -128,45 +122,40 @@ export function SafetyProofModal({ open, onClose, raffle }: Props) {
         </div>
 
         <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-          These values are read from the network and can’t be changed by the app.
+          These values come from the network and can’t be changed by the app.
         </div>
 
         <div style={section}>
-          <div style={{ fontWeight: 800 }}>Raffle state</div>
+          <div style={{ fontWeight: 800 }}>Status</div>
 
           <div style={row}>
-            <div style={label}>Status</div>
-            <div style={value}>{statusLabelFromUint8(raffle.status)}</div>
+            <div style={label}>State</div>
+            <div style={value}>{statusLabel(raffle.status)}</div>
           </div>
 
           <div style={row}>
-            <div style={label}>Raffle</div>
+            <div style={label}>Raffle address</div>
             <div style={value}>{short(raffle.address)}</div>
           </div>
 
           <div style={row}>
-            <div style={label}>USDC</div>
+            <div style={label}>USDC token</div>
             <div style={value}>{short(raffle.usdcToken)}</div>
           </div>
         </div>
 
         <div style={section}>
-          <div style={{ fontWeight: 800 }}>Who gets what (USDC)</div>
+          <div style={{ fontWeight: 800 }}>Who gets what</div>
 
           <div style={row}>
-            <div style={label}>Total ticket revenue (so far)</div>
-            <div style={value}>{fmtUsdcRaw(breakdown.revenue)} USDC</div>
-          </div>
-
-          <div style={row}>
-            <div style={label}>Winner pot</div>
-            <div style={value}>{fmtUsdcRaw(breakdown.pot)} USDC</div>
+            <div style={label}>Winner gets</div>
+            <div style={value}>{fmtUsdcRaw(safeBigInt(raffle.winningPot))} USDC</div>
           </div>
 
           <div style={row}>
             <div style={label}>Ppopgi fee</div>
             <div style={value}>
-              {fmtUsdcRaw(breakdown.fee)} USDC ({breakdown.pct.toString()}%)
+              {fmtUsdcRaw(breakdown.fee)} USDC ({raffle.protocolFeePercent}%)
             </div>
           </div>
 
@@ -181,7 +170,7 @@ export function SafetyProofModal({ open, onClose, raffle }: Props) {
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
-            “So far” means based on tickets sold up to now. Final settlement can include refunds/cancellations.
+            “So far” means based on tickets sold up to now.
           </div>
         </div>
 
@@ -189,8 +178,8 @@ export function SafetyProofModal({ open, onClose, raffle }: Props) {
           <div style={{ fontWeight: 800 }}>How the draw works</div>
 
           <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.45, opacity: 0.9 }}>
-            When time ends (or tickets sell out), anyone can start the draw. A randomness service is asked for a random
-            number. A winner is shown only after the randomness result arrives.
+            When time ends (or tickets sell out), anyone can start the draw. A randomness service is asked
+            for a random number. A winner is shown only after the randomness result arrives.
           </div>
 
           <div style={row}>
@@ -202,11 +191,11 @@ export function SafetyProofModal({ open, onClose, raffle }: Props) {
             <>
               <div style={row}>
                 <div style={label}>Request id</div>
-                <div style={value}>{String(raffle.entropyRequestId)}</div>
+                <div style={value}>{raffle.entropyRequestId ?? "—"}</div>
               </div>
               <div style={row}>
-                <div style={label}>Selected provider</div>
-                <div style={value}>{short(raffle.selectedProvider)}</div>
+                <div style={label}>Provider used</div>
+                <div style={value}>{short(raffle.selectedProvider ?? "—")}</div>
               </div>
             </>
           )}
