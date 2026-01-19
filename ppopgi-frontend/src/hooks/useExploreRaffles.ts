@@ -19,20 +19,27 @@ export function useExploreRaffles(limit = 500) {
     const controller = new AbortController();
 
     (async () => {
+      // Clean refetch UX
       setNote(null);
+      // Optional: uncomment if you want Explore to visually "reload" on refetch
+      // setItems(null);
 
       // 1) indexer-first (with timeout)
+      let t: number | null = null;
       try {
-        const t = window.setTimeout(() => controller.abort(), 4500);
+        t = window.setTimeout(() => controller.abort(), 4500);
+
         const data = await fetchRafflesFromSubgraph(controller.signal);
-        window.clearTimeout(t);
+
+        if (t) window.clearTimeout(t);
+        t = null;
 
         if (!alive) return;
 
         setMode("indexer");
         setNote(null);
 
-        // Explore: newest first
+        // Explore: newest first (best effort)
         const sorted = [...data].sort((a, b) => {
           const A = Number(a.lastUpdatedTimestamp || "0");
           const B = Number(b.lastUpdatedTimestamp || "0");
@@ -42,7 +49,9 @@ export function useExploreRaffles(limit = 500) {
         setItems(sorted.slice(0, limit));
         return;
       } catch {
-        // fall through
+        if (t) window.clearTimeout(t);
+        t = null;
+        // fall through to live fallback
       }
 
       // 2) fallback: on-chain reads
@@ -54,7 +63,10 @@ export function useExploreRaffles(limit = 500) {
         const data = await fetchRafflesOnChainFallback(Math.min(limit, 200));
         if (!alive) return;
 
-        setItems(data);
+        // Keep Explore consistent: "newest-ish first"
+        // Fallback doesn't have lastUpdatedTimestamp reliably, so we keep the order returned
+        // (your fallback loads newest registry entries first). Still safe to slice:
+        setItems(data.slice(0, limit));
       } catch {
         if (!alive) return;
         setNote("Could not load raffles right now. Please refresh.");
