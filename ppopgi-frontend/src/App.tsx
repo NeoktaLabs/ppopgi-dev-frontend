@@ -6,6 +6,7 @@ import { DisclaimerGate } from "./components/DisclaimerGate";
 import { CreateRaffleModal } from "./components/CreateRaffleModal";
 import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
 import { RaffleCard } from "./components/RaffleCard";
+import { CashierModal } from "./components/CashierModal";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
 
