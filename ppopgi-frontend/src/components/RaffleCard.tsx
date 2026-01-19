@@ -44,16 +44,28 @@ export function RaffleCard({ raffle, onOpen }: Props) {
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopyMsg("Link copied.");
-      window.setTimeout(() => setCopyMsg(null), 1200);
+
+      // auto-close after short feedback
+      window.setTimeout(() => {
+        setCopyMsg(null);
+        setShareOpen(false);
+      }, 900);
     } catch {
       window.prompt("Copy this link:", shareUrl);
       setCopyMsg("Copy the link.");
-      window.setTimeout(() => setCopyMsg(null), 1200);
+
+      window.setTimeout(() => {
+        setCopyMsg(null);
+        setShareOpen(false);
+      }, 1200);
     }
   }
 
   function openShare(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
+
+    // auto-close immediately after opening share
+    setShareOpen(false);
   }
 
   const cardStyle: React.CSSProperties = {
@@ -149,7 +161,6 @@ export function RaffleCard({ raffle, onOpen }: Props) {
         <div
           style={sharePanel}
           onClick={(e) => {
-            // keep clicks inside the panel from opening the modal
             e.preventDefault();
             e.stopPropagation();
           }}
