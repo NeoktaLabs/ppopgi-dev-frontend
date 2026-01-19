@@ -237,10 +237,10 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
        * Replace the method below to match your LotterySingleWinner ABI if needed.
        */
       const tx = prepareContractCall({
-        contract: raffleContract,
-        method: "function buyTickets(uint64 amount)",
-        params: [BigInt(ticketCount)],
-      });
+  contract: raffleContract,
+  method: "function buy(uint64 amount)",
+  params: [BigInt(ticketCount)],
+});
 
       await sendAndConfirm(tx);
 
