@@ -85,6 +85,14 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     minPurchase > 0 &&
     minPurchase <= Number(maxT);
 
+  const durationHint = useMemo(() => {
+    if (!durV) return "Choose a duration.";
+    if (!durOk) return "Minimum duration is 1 minute.";
+    const now = Date.now();
+    const end = new Date(now + durationSecondsN * 1000);
+    return `Ends at: ${end.toLocaleString()}`;
+  }, [durV, durOk, durationSecondsN]);
+
   async function onCreate() {
     setMsg(null);
 
@@ -134,6 +142,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     }
   }
 
+  // ✅ IMPORTANT: early return must be AFTER all hooks
   if (!open) return null;
 
   const overlay: React.CSSProperties = {
@@ -214,14 +223,6 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     textAlign: "center",
   };
 
-  const durationHint = useMemo(() => {
-    if (!durV) return "Choose a duration.";
-    if (!durOk) return "Minimum duration is 1 minute.";
-    const now = Date.now();
-    const end = new Date(now + durationSecondsN * 1000);
-    return `Ends at: ${end.toLocaleString()}`;
-  }, [durV, durOk, durationSecondsN]);
-
   return (
     <div style={overlay} onMouseDown={onClose}>
       <div style={card} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -253,9 +254,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
         <div style={section}>
           <div style={{ fontWeight: 800 }}>Create settings (live)</div>
 
-          {loading && (
-            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>Loading create settings…</div>
-          )}
+          {loading && <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>Loading create settings…</div>}
 
           {note && <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>{note}</div>}
 
@@ -325,11 +324,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                   inputMode="numeric"
                   placeholder="e.g. 15"
                 />
-                <select
-                  style={selectStyle}
-                  value={durationUnit}
-                  onChange={(e) => setDurationUnit(e.target.value as DurationUnit)}
-                >
+                <select style={selectStyle} value={durationUnit} onChange={(e) => setDurationUnit(e.target.value as any)}>
                   <option value="minutes">minutes</option>
                   <option value="hours">hours</option>
                   <option value="days">days</option>
