@@ -1,5 +1,5 @@
 // src/components/CreateRaffleModal.tsx
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { parseUnits } from "ethers";
 import { ETHERLINK_MAINNET } from "../chain/etherlink";
 import { useFactoryConfig } from "../hooks/useFactoryConfig";
@@ -26,6 +26,14 @@ function toInt(n: string, fallback = 0) {
   return Number.isFinite(x) ? Math.floor(x) : fallback;
 }
 
+type DurationUnit = "minutes" | "hours" | "days";
+
+function unitToSeconds(unit: DurationUnit): number {
+  if (unit === "minutes") return 60;
+  if (unit === "hours") return 3600;
+  return 86400;
+}
+
 export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const { data, loading, note } = useFactoryConfig(open);
 
@@ -38,7 +46,11 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const [winningPot, setWinningPot] = useState("100"); // USDC
   const [minTickets, setMinTickets] = useState("1");
   const [maxTickets, setMaxTickets] = useState("1000");
-  const [durationHours, setDurationHours] = useState("24");
+
+  // ✅ duration: value + unit
+  const [durationValue, setDurationValue] = useState("24");
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>("hours");
+
   const [minPurchaseAmount, setMinPurchaseAmount] = useState("1"); // tickets per purchase (uint32)
 
   const [msg, setMsg] = useState<string | null>(null);
@@ -53,18 +65,25 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   // Basic sanity limits (keeps users from accidentally typing nonsense)
   const minT = BigInt(toInt(minTickets, 0));
   const maxT = BigInt(toInt(maxTickets, 0));
-  const durH = toInt(durationHours, 0);
+
+  const durV = toInt(durationValue, 0);
+  const durationSecondsN = Math.max(0, durV) * unitToSeconds(durationUnit);
+
+  // ✅ allow minutes, but keep it safe (min 1 minute)
+  const minDurationSeconds = 60; // 1 minute
+  const durOk = durationSecondsN >= minDurationSeconds;
+
   const minPurchase = toInt(minPurchaseAmount, 0);
 
   const canSubmit =
     !!account?.address &&
     !isPending &&
     name.trim().length > 0 &&
-    minT > 0 &&
+    minT > 0n &&
     maxT >= minT &&
-    durH > 0 &&
+    durOk &&
     minPurchase > 0 &&
-    minPurchase <= maxT;
+    minPurchase <= Number(maxT);
 
   async function onCreate() {
     setMsg(null);
@@ -74,27 +93,24 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
       return;
     }
 
+    if (!durOk) {
+      setMsg("Duration must be at least 1 minute.");
+      return;
+    }
+
     try {
       // amounts are in USDC (6 decimals)
       const ticketPriceU = parseUnits(ticketPrice || "0", 6);
       const winningPotU = parseUnits(winningPot || "0", 6);
 
-      // ✅ IMPORTANT: thirdweb prepareContractCall expects `number` for uint64/uint32 here
-      const durationSeconds = BigInt(toInt(durationHours, 0) * 3600)
+      // uint64 durationSeconds
+      const durationSeconds = BigInt(durationSecondsN);
 
       const tx = prepareContractCall({
         contract: deployer,
         method:
           "function createSingleWinnerLottery(string name,uint256 ticketPrice,uint256 winningPot,uint64 minTickets,uint64 maxTickets,uint64 durationSeconds,uint32 minPurchaseAmount) returns (address lotteryAddr)",
-        params: [
-          name.trim(),
-          ticketPriceU,
-          winningPotU,
-          minT,
-          maxT,
-          durationSeconds,
-          minPurchase,
-        ],
+        params: [name.trim(), ticketPriceU, winningPotU, minT, maxT, durationSeconds, minPurchase],
       });
 
       await sendAndConfirm(tx);
@@ -172,6 +188,11 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     color: "#2B2B33",
   };
 
+  const selectStyle: React.CSSProperties = {
+    ...input,
+    cursor: "pointer",
+  };
+
   const grid2: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
@@ -192,6 +213,14 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     fontWeight: 800,
     textAlign: "center",
   };
+
+  const durationHint = useMemo(() => {
+    if (!durV) return "Choose a duration.";
+    if (!durOk) return "Minimum duration is 1 minute.";
+    const now = Date.now();
+    const end = new Date(now + durationSecondsN * 1000);
+    return `Ends at: ${end.toLocaleString()}`;
+  }, [durV, durOk, durationSecondsN]);
 
   return (
     <div style={overlay} onMouseDown={onClose}>
@@ -225,14 +254,10 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
           <div style={{ fontWeight: 800 }}>Create settings (live)</div>
 
           {loading && (
-            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
-              Loading create settings…
-            </div>
+            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>Loading create settings…</div>
           )}
 
-          {note && (
-            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>{note}</div>
-          )}
+          {note && <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>{note}</div>}
 
           <div style={row}>
             <div style={label}>Ppopgi fee</div>
@@ -264,12 +289,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
           <div style={{ fontWeight: 800 }}>Raffle details</div>
 
           <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Name</div>
-          <input
-            style={input}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Ppopgi #12"
-          />
+          <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ppopgi #12" />
 
           <div style={grid2}>
             <div>
@@ -295,16 +315,33 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
           <div style={grid2}>
             <div>
-              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Duration (hours)</div>
-              <input style={input} value={durationHours} onChange={(e) => setDurationHours(e.target.value)} />
+              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Duration</div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <input
+                  style={input}
+                  value={durationValue}
+                  onChange={(e) => setDurationValue(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="e.g. 15"
+                />
+                <select
+                  style={selectStyle}
+                  value={durationUnit}
+                  onChange={(e) => setDurationUnit(e.target.value as DurationUnit)}
+                >
+                  <option value="minutes">minutes</option>
+                  <option value="hours">hours</option>
+                  <option value="days">days</option>
+                </select>
+              </div>
+
+              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>{durationHint}</div>
             </div>
+
             <div>
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Min purchase (tickets)</div>
-              <input
-                style={input}
-                value={minPurchaseAmount}
-                onChange={(e) => setMinPurchaseAmount(e.target.value)}
-              />
+              <input style={input} value={minPurchaseAmount} onChange={(e) => setMinPurchaseAmount(e.target.value)} />
             </div>
           </div>
 
@@ -316,9 +353,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
             {isPending ? "Creating…" : account?.address ? "Create raffle" : "Sign in to create"}
           </button>
 
-          {msg && (
-            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{msg}</div>
-          )}
+          {msg && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{msg}</div>}
         </div>
 
         <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
