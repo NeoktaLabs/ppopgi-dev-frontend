@@ -10,6 +10,8 @@ import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
 import { useExploreRaffles } from "./hooks/useExploreRaffles";
 
+import { ExplorePage } from "./pages/ExplorePage";
+
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
 
 function short(a: string) {
@@ -65,6 +67,7 @@ export default function App() {
 
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear.");
+    // home + explore both should refresh
     refetchHome();
     refetchExplore();
     window.setTimeout(() => {
@@ -78,17 +81,6 @@ export default function App() {
     setDetailsOpen(true);
   }
 
-  function closeRaffle() {
-    setDetailsOpen(false);
-    setSelectedRaffleId(null);
-  }
-
-  // ✅ sanity: if user navigates, close modal + clear selection
-  useEffect(() => {
-    setDetailsOpen(false);
-    setSelectedRaffleId(null);
-  }, [page]);
-
   async function onSignOut() {
     try {
       if (activeWallet) disconnect(activeWallet);
@@ -97,11 +89,6 @@ export default function App() {
     }
     clearSession();
     setCreatedHint(null);
-
-    // also close any open modals
-    setSignInOpen(false);
-    setCreateOpen(false);
-    closeRaffle();
   }
 
   const topBtn: React.CSSProperties = {
@@ -129,11 +116,7 @@ export default function App() {
 
       {/* Top bar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <b
-          style={{ cursor: "pointer" }}
-          onClick={() => setPage("home")}
-          title="Go to home"
-        >
+        <b style={{ cursor: "pointer" }} onClick={() => setPage("home")}>
           Ppopgi
         </b>
 
@@ -171,10 +154,16 @@ export default function App() {
         </div>
       </div>
 
-      {note && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>{note}</div>}
+      {note && (
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>
+          {note}
+        </div>
+      )}
 
       {createdHint && (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>{createdHint}</div>
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
+          {createdHint}
+        </div>
       )}
 
       {/* HOME */}
@@ -186,7 +175,9 @@ export default function App() {
               {bigPrizes.map((r) => (
                 <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
               ))}
-              {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
+              {bigPrizes.length === 0 && (
+                <div style={{ opacity: 0.8 }}>No open raffles right now.</div>
+              )}
             </div>
           </div>
 
@@ -204,33 +195,23 @@ export default function App() {
 
       {/* EXPLORE */}
       {page === "explore" && (
-        <div style={sectionWrap}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ margin: 0 }}>Explore</h3>
-            <button style={topBtn} onClick={() => setPage("home")}>
-              Back to home
-            </button>
-          </div>
-
-          <div style={grid}>
-            {(exploreItems ?? []).map((r) => (
-              <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-            ))}
-
-            {exploreItems && exploreItems.length === 0 && (
-              <div style={{ opacity: 0.8 }}>No raffles to show.</div>
-            )}
-            {!exploreItems && <div style={{ opacity: 0.8 }}>Loading raffles…</div>}
-          </div>
-        </div>
+        <ExplorePage items={exploreItems} note={exploreNote} onOpenRaffle={openRaffle} />
       )}
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
 
-      <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
+      <CreateRaffleModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={onCreatedRaffle}
+      />
 
-      <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
+      <RaffleDetailsModal
+        open={detailsOpen}
+        raffleId={selectedRaffleId}
+        onClose={() => setDetailsOpen(false)}
+      />
     </div>
   );
 }
