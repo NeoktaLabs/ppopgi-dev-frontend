@@ -4,7 +4,6 @@ import { useSession } from "./state/useSession";
 import { SignInModal } from "./components/SignInModal";
 import { DisclaimerGate } from "./components/DisclaimerGate";
 import { CreateRaffleModal } from "./components/CreateRaffleModal";
-import { ETHERLINK_MAINNET } from "./chain/etherlink";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
 
@@ -20,40 +19,31 @@ function formatDeadline(seconds: string) {
 
 export default function App() {
   const account = useSession((s) => s.account);
-  const chainId = useSession((s) => s.chainId);
   const clear = useSession((s) => s.clear);
 
   const [signInOpen, setSignInOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
-  // ✅ small feedback after create
   const [createdHint, setCreatedHint] = useState<string | null>(null);
 
   useEffect(() => {
     setGateOpen(!hasAcceptedDisclaimer());
   }, []);
 
-  const wrongPlace = !!account && chainId !== ETHERLINK_MAINNET.chainId;
-
   function onAcceptGate() {
     acceptDisclaimer();
     setGateOpen(false);
   }
 
-  // ✅ now we also get refetch
   const { bigPrizes, endingSoon, note, refetch } = useHomeRaffles();
 
   function onCreatedRaffle() {
-    // subgraph indexing can be slightly delayed — we refetch immediately,
-    // and show a calm message.
     setCreatedHint("Raffle created. It may take a moment to appear on the home page.");
-    refetch?.();
+    refetch();
 
-    // optional: refetch again after a short delay (often helps Graph indexing)
-    setTimeout(() => {
-      refetch?.();
-    }, 3500);
+    // helpful second pull (subgraph indexing delay)
+    window.setTimeout(() => refetch(), 3500);
   }
 
   return (
@@ -67,14 +57,7 @@ export default function App() {
         <div style={{ display: "flex", gap: 10 }}>
           <button>Explore</button>
 
-          {/* ✅ disable Create unless signed in */}
-          <button
-            onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}
-            style={{
-              opacity: account ? 1 : 0.75,
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
             Create
           </button>
         </div>
@@ -100,21 +83,12 @@ export default function App() {
         </div>
       </div>
 
-      {/* Wrong place notice (keep or remove — your call) */}
-      {wrongPlace && (
-        <div style={{ marginTop: 16, padding: 12, border: "1px solid #ccc", borderRadius: 10 }}>
-          This raffle booth runs on <b>{ETHERLINK_MAINNET.chainName}</b>.
-        </div>
-      )}
-
-      {/* Calm fallback note */}
       {note && (
         <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>
           {note}
         </div>
       )}
 
-      {/* ✅ feedback after create */}
       {createdHint && (
         <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
           {createdHint}
@@ -167,7 +141,7 @@ export default function App() {
       <CreateRaffleModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={onCreatedRaffle} // ✅ here
+        onCreated={onCreatedRaffle}
       />
     </div>
   );
