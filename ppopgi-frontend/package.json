@@ -10,9 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@metamask/detect-provider": "^2.0.0",
-    "@metamask/sdk": "^0.34.0",
-    "@walletconnect/ethereum-provider": "^2.23.3",
     "ethers": "^6.16.0",
     "graphql-request": "^7.4.0",
     "react": "^19.2.0",

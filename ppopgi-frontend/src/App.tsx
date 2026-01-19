@@ -5,7 +5,6 @@ import { SignInModal } from "./components/SignInModal";
 import { DisclaimerGate } from "./components/DisclaimerGate";
 import { CreateRaffleModal } from "./components/CreateRaffleModal";
 import { ETHERLINK_MAINNET } from "./chain/etherlink";
-import { useAutoRestoreSession } from "./wallet/useAutoRestoreSession";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
 
@@ -20,7 +19,6 @@ function formatDeadline(seconds: string) {
 }
 
 export default function App() {
-  useAutoRestoreSession();
 
   const account = useSession((s) => s.account);
   const chainId = useSession((s) => s.chainId);
