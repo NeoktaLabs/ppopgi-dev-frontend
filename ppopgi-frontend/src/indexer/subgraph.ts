@@ -5,6 +5,7 @@ export type RaffleListItem = {
   id: string; // raffle address
   name: string;
   status: RaffleStatus;
+  creator: string;
   winningPot: string; // BigInt as string
   ticketPrice: string; // BigInt as string
   deadline: string; // BigInt as string (seconds)
