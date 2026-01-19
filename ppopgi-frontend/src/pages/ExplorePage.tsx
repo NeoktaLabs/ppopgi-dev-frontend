@@ -3,6 +3,9 @@ import React, { useMemo, useState } from "react";
 import type { RaffleListItem, RaffleStatus } from "../indexer/subgraph";
 import { RaffleCard } from "../components/RaffleCard";
 
+// thirdweb source of truth for "my raffles"
+import { useActiveAccount } from "thirdweb/react";
+
 type Props = {
   items: RaffleListItem[] | null;
   note: string | null;
@@ -15,16 +18,43 @@ function norm(s: string) {
   return s.trim().toLowerCase();
 }
 
+function isActiveStatus(status: RaffleStatus) {
+  return status === "OPEN" || status === "FUNDING_PENDING";
+}
+
 export function ExplorePage({ items, note, onOpenRaffle }: Props) {
+  const activeAccount = useActiveAccount();
+  const me = activeAccount?.address ? norm(activeAccount.address) : null;
+
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<RaffleStatus | "ALL">("ALL");
   const [sort, setSort] = useState<SortMode>("endingSoon");
 
+  // quick toggles
+  const [openOnly, setOpenOnly] = useState(false);
+  const [myRafflesOnly, setMyRafflesOnly] = useState(false);
+
   const list = useMemo(() => {
     const all = items ?? [];
 
-    // filter by status
+    // status filter
     let filtered = status === "ALL" ? all : all.filter((r) => r.status === status);
+
+    // quick toggle: open only
+    if (openOnly) {
+      filtered = filtered.filter((r) => isActiveStatus(r.status));
+    }
+
+    // quick toggle: my raffles
+    // We try creator first (if your subgraph exposes it later),
+    // otherwise fallback to deployer (already in your type).
+    if (myRafflesOnly && me) {
+      filtered = filtered.filter((r: any) => {
+        const creator = r.creator ? norm(String(r.creator)) : null;
+        const deployer = r.deployer ? norm(String(r.deployer)) : null;
+        return creator === me || deployer === me;
+      });
+    }
 
     // search: name or address
     const query = norm(q);
@@ -56,7 +86,7 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
     });
 
     return sorted;
-  }, [items, q, status, sort]);
+  }, [items, q, status, sort, openOnly, myRafflesOnly, me]);
 
   const input: React.CSSProperties = {
     width: "100%",
@@ -73,6 +103,22 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
     cursor: "pointer",
   };
 
+  const pill: React.CSSProperties = {
+    border: "1px solid rgba(255,255,255,0.45)",
+    background: "rgba(255,255,255,0.22)",
+    borderRadius: 999,
+    padding: "8px 10px",
+    cursor: "pointer",
+    color: "#2B2B33",
+    fontWeight: 700,
+    fontSize: 13,
+  };
+
+  const pillOn: React.CSSProperties = {
+    ...pill,
+    background: "rgba(255,255,255,0.35)",
+  };
+
   return (
     <div style={{ marginTop: 18 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
@@ -85,6 +131,30 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
           {note}
         </div>
       )}
+
+      {/* Quick toggles */}
+      <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button
+          style={openOnly ? pillOn : pill}
+          onClick={() => setOpenOnly((v) => !v)}
+          aria-pressed={openOnly}
+        >
+          Open only
+        </button>
+
+        <button
+          style={!me ? { ...pill, opacity: 0.55, cursor: "not-allowed" } : myRafflesOnly ? pillOn : pill}
+          onClick={() => {
+            if (!me) return;
+            setMyRafflesOnly((v) => !v);
+          }}
+          aria-pressed={myRafflesOnly}
+          disabled={!me}
+          title={!me ? "Sign in to filter your raffles" : "Show only raffles linked to your address"}
+        >
+          My raffles
+        </button>
+      </div>
 
       {/* Filters */}
       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
@@ -129,7 +199,10 @@ export function ExplorePage({ items, note, onOpenRaffle }: Props) {
         ))}
 
         {items && list.length === 0 && (
-          <div style={{ opacity: 0.85 }}>No raffles match your filters.</div>
+          <div style={{ opacity: 0.85 }}>
+            No raffles match your filters.
+            {!me && myRafflesOnly ? " (Sign in to use “My raffles”.)" : ""}
+          </div>
         )}
 
         {!items && (
