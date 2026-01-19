@@ -46,13 +46,15 @@ export type RaffleDetails = {
 
   feeRecipient: string;
   protocolFeePercent: string;
+
+  // ✅ for SafetyProofModal (present in your ABI)
+  ticketRevenue: string; // uint256
+  entropyProvider: string; // address
+  entropyRequestId: string; // uint64
+  selectedProvider: string; // address
 };
 
-async function readFirst(
-  contract: any,
-  label: string,
-  candidates: string[]
-): Promise<any> {
+async function readFirst(contract: any, label: string, candidates: string[]): Promise<any> {
   let lastErr: any = null;
   for (const method of candidates) {
     try {
@@ -61,18 +63,12 @@ async function readFirst(
       lastErr = e;
     }
   }
-  // Helpful debug (won’t break UI)
   // eslint-disable-next-line no-console
   console.warn(`[useRaffleDetails] Failed to read ${label}. Tried:`, candidates, lastErr);
   throw lastErr;
 }
 
-async function readFirstOr(
-  contract: any,
-  label: string,
-  candidates: string[],
-  fallback: any
-): Promise<any> {
+async function readFirstOr(contract: any, label: string, candidates: string[], fallback: any): Promise<any> {
   try {
     return await readFirst(contract, label, candidates);
   } catch {
@@ -88,7 +84,6 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
   const normalizedAddress = useMemo(() => {
     if (!raffleAddress) return null;
     try {
-      // checksum for safety; lowercase is fine too
       return getAddress(raffleAddress);
     } catch {
       return raffleAddress;
@@ -114,74 +109,50 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
       setNote(null);
 
       try {
-        // IMPORTANT: each field is resilient now.
-        const name = await readFirstOr(contract, "name", [
-          "function name() view returns (string)",
-        ], "Unknown raffle");
+        // ✅ ABI-backed reads
+        const [
+          name,
+          statusU8,
+          sold,
+          ticketPrice,
+          winningPot,
+          minTickets,
+          maxTickets,
+          deadline,
+          paused,
+          usdcToken,
+          creator,
+          winner,
+          winningTicketIndex,
+          feeRecipient,
+          protocolFeePercent,
+          ticketRevenue,
+          entropyProvider,
+          entropyRequestId,
+          selectedProvider,
+        ] = await Promise.all([
+          readFirstOr(contract, "name", ["function name() view returns (string)"], "Unknown raffle"),
+          readFirstOr(contract, "status", ["function status() view returns (uint8)"], 255),
+          readFirstOr(contract, "sold", ["function getSold() view returns (uint256)"], 0n),
+          readFirstOr(contract, "ticketPrice", ["function ticketPrice() view returns (uint256)"], 0n),
+          readFirstOr(contract, "winningPot", ["function winningPot() view returns (uint256)"], 0n),
+          readFirstOr(contract, "minTickets", ["function minTickets() view returns (uint64)"], 0),
+          readFirstOr(contract, "maxTickets", ["function maxTickets() view returns (uint64)"], 0),
+          readFirstOr(contract, "deadline", ["function deadline() view returns (uint64)"], 0),
+          readFirstOr(contract, "paused", ["function paused() view returns (bool)"], false),
+          readFirstOr(contract, "usdcToken", ["function usdcToken() view returns (address)"], "0x0000000000000000000000000000000000000000"),
+          readFirstOr(contract, "creator", ["function creator() view returns (address)"], "0x0000000000000000000000000000000000000000"),
+          readFirstOr(contract, "winner", ["function winner() view returns (address)"], "0x0000000000000000000000000000000000000000"),
+          readFirstOr(contract, "winningTicketIndex", ["function winningTicketIndex() view returns (uint256)"], 0n),
+          readFirstOr(contract, "feeRecipient", ["function feeRecipient() view returns (address)"], "0x0000000000000000000000000000000000000000"),
+          readFirstOr(contract, "protocolFeePercent", ["function protocolFeePercent() view returns (uint256)"], 0n),
 
-        const statusU8 = await readFirstOr(contract, "status", [
-          "function status() view returns (uint8)",
-        ], 255);
-
-        const sold = await readFirstOr(contract, "sold", [
-          "function getSold() view returns (uint256)",
-          "function sold() view returns (uint256)",
-          "function ticketsSold() view returns (uint256)",
-        ], 0n);
-
-        const ticketPrice = await readFirstOr(contract, "ticketPrice", [
-          "function ticketPrice() view returns (uint256)",
-          "function getTicketPrice() view returns (uint256)",
-        ], 0n);
-
-        const winningPot = await readFirstOr(contract, "winningPot", [
-          "function winningPot() view returns (uint256)",
-          "function getWinningPot() view returns (uint256)",
-        ], 0n);
-
-        const minTickets = await readFirstOr(contract, "minTickets", [
-          "function minTickets() view returns (uint64)",
-        ], 0);
-
-        const maxTickets = await readFirstOr(contract, "maxTickets", [
-          "function maxTickets() view returns (uint64)",
-        ], 0);
-
-        const deadline = await readFirstOr(contract, "deadline", [
-          "function deadline() view returns (uint64)",
-        ], 0);
-
-        const paused = await readFirstOr(contract, "paused", [
-          "function paused() view returns (bool)",
-        ], false);
-
-        // USDC token address name varies a lot across contracts:
-        const usdcToken = await readFirstOr(contract, "usdcToken", [
-          "function usdcToken() view returns (address)",
-          "function usdc() view returns (address)",
-          "function USDC() view returns (address)",
-        ], "0x0000000000000000000000000000000000000000");
-
-        const creator = await readFirstOr(contract, "creator", [
-          "function creator() view returns (address)",
-          "function owner() view returns (address)",
-        ], "0x0000000000000000000000000000000000000000");
-
-        const winner = await readFirstOr(contract, "winner", [
-          "function winner() view returns (address)",
-        ], "0x0000000000000000000000000000000000000000");
-
-        const winningTicketIndex = await readFirstOr(contract, "winningTicketIndex", [
-          "function winningTicketIndex() view returns (uint256)",
-        ], 0n);
-
-        const feeRecipient = await readFirstOr(contract, "feeRecipient", [
-          "function feeRecipient() view returns (address)",
-        ], "0x0000000000000000000000000000000000000000");
-
-        const protocolFeePercent = await readFirstOr(contract, "protocolFeePercent", [
-          "function protocolFeePercent() view returns (uint256)",
-        ], 0n);
+          // ✅ SafetyProofModal fields (present in your ABI)
+          readFirstOr(contract, "ticketRevenue", ["function ticketRevenue() view returns (uint256)"], 0n),
+          readFirstOr(contract, "entropyProvider", ["function entropyProvider() view returns (address)"], "0x0000000000000000000000000000000000000000"),
+          readFirstOr(contract, "entropyRequestId", ["function entropyRequestId() view returns (uint64)"], 0),
+          readFirstOr(contract, "selectedProvider", ["function selectedProvider() view returns (address)"], "0x0000000000000000000000000000000000000000"),
+        ]);
 
         if (!alive) return;
 
@@ -207,17 +178,19 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
 
           feeRecipient: String(feeRecipient),
           protocolFeePercent: String(protocolFeePercent),
+
+          ticketRevenue: String(ticketRevenue),
+          entropyProvider: String(entropyProvider),
+          entropyRequestId: String(entropyRequestId),
+          selectedProvider: String(selectedProvider),
         });
 
-        // If some fields were missing, we can show a soft note:
         if (String(name) === "Unknown raffle") {
           setNote("Some live fields could not be read yet, but the raffle is reachable.");
         }
-      } catch (e: any) {
+      } catch {
         if (!alive) return;
         setData(null);
-
-        // Make the note slightly more actionable
         setNote("Could not load this raffle right now. Please refresh (and check console logs).");
       } finally {
         if (!alive) return;
