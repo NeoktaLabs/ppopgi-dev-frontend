@@ -10,13 +10,14 @@ import { CashierModal } from "./components/CashierModal";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
 import { ExplorePage } from "./pages/ExplorePage";
+import { DashboardPage } from "./pages/DashboardPage";
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
 
 function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
-type Page = "home" | "explore";
+type Page = "home" | "explore" | "dashboard";
 
 function extractAddress(input: string): string | null {
   if (!input) return null;
@@ -96,6 +97,11 @@ export default function App() {
     }
     setSession({ account, connector: "thirdweb" });
   }, [account, setSession]);
+
+  // If user signs out while on dashboard, move them to home (so UI can’t get stuck)
+  useEffect(() => {
+    if (page === "dashboard" && !account) setPage("home");
+  }, [page, account]);
 
   const { bigPrizes, endingSoon, note: homeNote, refetch: refetchHome } = useHomeRaffles();
 
@@ -187,6 +193,16 @@ export default function App() {
             Explore
           </button>
 
+          {account && (
+            <button
+              style={page === "dashboard" ? topBtnActive : topBtn}
+              onClick={() => setPage("dashboard")}
+              title="Your created + joined raffles"
+            >
+              Dashboard
+            </button>
+          )}
+
           <button style={topBtn} onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
             Create
           </button>
@@ -246,6 +262,9 @@ export default function App() {
 
       {/* EXPLORE */}
       {page === "explore" && <ExplorePage onOpenRaffle={openRaffle} />}
+
+      {/* DASHBOARD */}
+      {page === "dashboard" && <DashboardPage account={account} onOpenRaffle={openRaffle} />}
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
