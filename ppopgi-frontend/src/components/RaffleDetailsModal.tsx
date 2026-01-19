@@ -50,6 +50,11 @@ function toInt(v: string, fallback = 0) {
   return Number.isFinite(n) ? Math.floor(n) : fallback;
 }
 
+function isZeroAddr(a?: string | null) {
+  if (!a) return true;
+  return a.toLowerCase() === "0x0000000000000000000000000000000000000000";
+}
+
 export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   const { data, loading, note } = useRaffleDetails(raffleId, open);
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -71,6 +76,14 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
   const canShowWinner = useMemo(() => data?.status === "COMPLETED", [data?.status]);
 
+  const raffleIsOpen = !!data && data.status === "OPEN" && !data.paused;
+  const raffleNotJoinableReason = useMemo(() => {
+    if (!data) return null;
+    if (data.paused) return "This raffle is paused right now.";
+    if (data.status !== "OPEN") return `This raffle is ${statusLabel(data.status)} right now.`;
+    return null;
+  }, [data]);
+
   // Contracts (thirdweb)
   const raffleContract = useMemo(() => {
     if (!raffleId) return null;
@@ -82,7 +95,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   }, [raffleId]);
 
   const usdcContract = useMemo(() => {
-    // Prefer the raffle’s live USDC if present; fallback to config
     const addr = data?.usdcToken || ADDRESSES.USDC;
     if (!addr) return null;
 
@@ -136,7 +148,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     }
   }
 
-  // Load USDC balance + allowance when open + account + raffle loaded
   useEffect(() => {
     if (!open) return;
     if (!activeAccount?.address) return;
@@ -144,24 +155,16 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, activeAccount?.address, raffleId, data?.usdcToken]);
 
-  // Optional but helpful: if ticket count changes, allowance requirements change too
-  useEffect(() => {
-    if (!open) return;
-    if (!activeAccount?.address) return;
-    // no spam — just recompute UI from existing allowance/bal; refresh not required
-    // but we keep this hook in case you want to uncomment a refresh later
-  }, [open, activeAccount?.address, ticketCount]);
-
   if (!open) return null;
 
   const hasEnoughAllowance = allowance !== null ? allowance >= totalCostU : false;
-  const hasEnoughBalance = usdcBal !== null ? usdcBal >= totalCostU : true; // if unknown, don’t block
+  const hasEnoughBalance = usdcBal !== null ? usdcBal >= totalCostU : true;
 
   const canBuy =
     isConnected &&
+    raffleIsOpen &&
     !!data &&
-    data.status === "OPEN" &&
-    !data.paused &&
+    !!raffleContract &&
     ticketCount > 0 &&
     totalCostU > 0n &&
     hasEnoughAllowance &&
@@ -170,9 +173,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
   const needsAllow =
     isConnected &&
+    raffleIsOpen &&
     !!data &&
-    data.status === "OPEN" &&
-    !data.paused &&
+    !!usdcContract &&
     ticketCount > 0 &&
     totalCostU > 0n &&
     !hasEnoughAllowance &&
@@ -187,6 +190,10 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     }
     if (!data || !raffleId || !usdcContract) {
       setBuyMsg("Could not prepare this step. Please try again.");
+      return;
+    }
+    if (!raffleIsOpen) {
+      setBuyMsg(raffleNotJoinableReason ?? "This raffle cannot be joined right now.");
       return;
     }
     if (totalCostU <= 0n) {
@@ -222,12 +229,8 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
       setBuyMsg("Could not prepare this purchase. Please try again.");
       return;
     }
-    if (data.status !== "OPEN") {
-      setBuyMsg("This raffle is not open right now.");
-      return;
-    }
-    if (data.paused) {
-      setBuyMsg("This raffle is paused right now.");
+    if (!raffleIsOpen) {
+      setBuyMsg(raffleNotJoinableReason ?? "This raffle cannot be joined right now.");
       return;
     }
     if (ticketCount <= 0) {
@@ -236,9 +239,10 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     }
 
     try {
+      // ✅ ABI-correct: buyTickets(uint256 count)
       const tx = prepareContractCall({
         contract: raffleContract,
-        method: "function buy(uint64 amount)",
+        method: "function buyTickets(uint256 count)",
         params: [BigInt(ticketCount)],
       });
 
@@ -439,12 +443,19 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
             <div style={section}>
               <div style={{ fontWeight: 800 }}>Join</div>
 
+              {raffleNotJoinableReason && (
+                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>
+                  {raffleNotJoinableReason}
+                </div>
+              )}
+
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>How many tickets</div>
               <input
                 style={input}
                 value={tickets}
                 onChange={(e) => setTickets(e.target.value)}
                 placeholder="e.g. 3"
+                inputMode="numeric"
               />
 
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
@@ -465,7 +476,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                   )}
                 </div>
               ) : (
-                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>Please sign in to join.</div>
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+                  Please sign in to join.
+                </div>
               )}
 
               <button style={needsAllow ? btnEnabled : btnDisabled} disabled={!needsAllow} onClick={onAllow}>
@@ -476,11 +489,28 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                 {isPending ? "Confirming…" : isConnected ? "Buy tickets" : "Sign in to join"}
               </button>
 
+              {!hasEnoughBalance && (
+                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+                  Not enough USDC for this purchase.
+                </div>
+              )}
+
+              {/* Nice hint if winner is already set */}
+              {canShowWinner && data.winner && !isZeroAddr(data.winner) && (
+                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
+                  This raffle is settled — joining is no longer possible.
+                </div>
+              )}
+
               <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
                 Nothing happens automatically. You always confirm actions yourself.
               </div>
 
-              {buyMsg && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{buyMsg}</div>}
+              {buyMsg && (
+                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+                  {buyMsg}
+                </div>
+              )}
             </div>
 
             {/* Winner */}
