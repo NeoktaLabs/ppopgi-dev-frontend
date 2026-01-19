@@ -1,5 +1,5 @@
 // src/components/CreateRaffleModal.tsx
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { parseUnits } from "ethers";
 import { ETHERLINK_MAINNET } from "../chain/etherlink";
 import { useFactoryConfig } from "../hooks/useFactoryConfig";
@@ -13,6 +13,7 @@ import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
 type Props = {
   open: boolean;
   onClose: () => void;
+  onCreated?: () => void; // ✅ lets App refetch home raffles after a creation
 };
 
 function short(a: string) {
@@ -25,7 +26,7 @@ function toInt(n: string, fallback = 0) {
   return Number.isFinite(x) ? Math.floor(x) : fallback;
 }
 
-export function CreateRaffleModal({ open, onClose }: Props) {
+export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const { data, loading, note } = useFactoryConfig(open);
 
   const account = useActiveAccount();
@@ -42,22 +43,28 @@ export function CreateRaffleModal({ open, onClose }: Props) {
 
   const [msg, setMsg] = useState<string | null>(null);
 
-  const deployer = useMemo(() => {
-    return getContract({
-      client: thirdwebClient,
-      chain: ETHERLINK_CHAIN,
-      address: ADDRESSES.SingleWinnerDeployer,
-    });
-  }, []);
+  // ✅ no memo needed; cheap and avoids stale-deps issues
+  const deployer = getContract({
+    client: thirdwebClient,
+    chain: ETHERLINK_CHAIN,
+    address: ADDRESSES.SingleWinnerDeployer,
+  });
+
+  // Basic sanity limits (keeps users from accidentally typing nonsense)
+  const minT = toInt(minTickets, 0);
+  const maxT = toInt(maxTickets, 0);
+  const durH = toInt(durationHours, 0);
+  const minPurchase = toInt(minPurchaseAmount, 0);
 
   const canSubmit =
     !!account?.address &&
     !isPending &&
     name.trim().length > 0 &&
-    toInt(minTickets, 0) > 0 &&
-    toInt(maxTickets, 0) >= toInt(minTickets, 0) &&
-    toInt(durationHours, 0) > 0 &&
-    toInt(minPurchaseAmount, 0) > 0;
+    minT > 0 &&
+    maxT >= minT &&
+    durH > 0 &&
+    minPurchase > 0 &&
+    minPurchase <= maxT;
 
   async function onCreate() {
     setMsg(null);
@@ -72,10 +79,8 @@ export function CreateRaffleModal({ open, onClose }: Props) {
       const ticketPriceU = parseUnits(ticketPrice || "0", 6);
       const winningPotU = parseUnits(winningPot || "0", 6);
 
-      const minT = BigInt(toInt(minTickets, 0));
-      const maxT = BigInt(toInt(maxTickets, 0));
-      const durationSeconds = BigInt(toInt(durationHours, 0) * 3600);
-      const minPurchase = toInt(minPurchaseAmount, 0);
+      // ✅ IMPORTANT: thirdweb prepareContractCall expects `number` for uint64/uint32 here
+      const durationSeconds = durH * 3600;
 
       const tx = prepareContractCall({
         contract: deployer,
@@ -95,7 +100,13 @@ export function CreateRaffleModal({ open, onClose }: Props) {
       await sendAndConfirm(tx);
 
       setMsg("Raffle created successfully.");
-      // optional: close immediately
+
+      // ✅ Ask home to refetch (indexer-first with live fallback)
+      try {
+        onCreated?.();
+      } catch {}
+
+      // Optional: close immediately (keeps UX simple)
       onClose();
     } catch (e: any) {
       const m = String(e?.message || "");
@@ -214,7 +225,9 @@ export function CreateRaffleModal({ open, onClose }: Props) {
           <div style={{ fontWeight: 800 }}>Create settings (live)</div>
 
           {loading && (
-            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>Loading create settings…</div>
+            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
+              Loading create settings…
+            </div>
           )}
 
           {note && (
@@ -251,7 +264,12 @@ export function CreateRaffleModal({ open, onClose }: Props) {
           <div style={{ fontWeight: 800 }}>Raffle details</div>
 
           <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Name</div>
-          <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ppopgi #12" />
+          <input
+            style={input}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Ppopgi #12"
+          />
 
           <div style={grid2}>
             <div>
@@ -299,9 +317,7 @@ export function CreateRaffleModal({ open, onClose }: Props) {
           </button>
 
           {msg && (
-            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-              {msg}
-            </div>
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{msg}</div>
           )}
         </div>
 
