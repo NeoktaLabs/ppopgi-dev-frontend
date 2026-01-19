@@ -4,24 +4,50 @@ import { getContract, readContract } from "thirdweb";
 import { thirdwebClient } from "../thirdweb/client";
 import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
 
+export type RaffleStatus =
+  | "FUNDING_PENDING"
+  | "OPEN"
+  | "DRAWING"
+  | "COMPLETED"
+  | "CANCELED"
+  | "UNKNOWN";
+
+function statusFromUint8(n: number): RaffleStatus {
+  // Keep this mapping aligned with your contract enum
+  if (n === 0) return "FUNDING_PENDING";
+  if (n === 1) return "OPEN";
+  if (n === 2) return "DRAWING";
+  if (n === 3) return "COMPLETED";
+  if (n === 4) return "CANCELED";
+  return "UNKNOWN";
+}
+
 export type RaffleDetails = {
   address: string;
 
   name: string;
-  status: number; // enum Status as uint8
+  status: RaffleStatus;
+
   sold: string;
 
-  ticketPrice: string; // uint256 as string (USDC 6 decimals)
-  winningPot: string; // uint256 as string (USDC 6 decimals)
+  ticketPrice: string; // uint256 (USDC 6 decimals) as string
+  winningPot: string; // uint256 (USDC 6 decimals) as string
 
-  minTickets: string;
-  maxTickets: string;
-  deadline: string; // unix seconds
+  minTickets: string; // uint64 as string
+  maxTickets: string; // uint64 as string
+  deadline: string; // uint64 unix seconds as string
   paused: boolean;
 
   usdcToken: string;
   creator: string;
+
+  // settlement
   winner: string;
+  winningTicketIndex: string;
+
+  // fee transparency
+  feeRecipient: string;
+  protocolFeePercent: string;
 };
 
 export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
@@ -50,7 +76,7 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
       try {
         const [
           name,
-          status,
+          statusU8,
           sold,
           ticketPrice,
           winningPot,
@@ -61,6 +87,9 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           usdcToken,
           creator,
           winner,
+          winningTicketIndex,
+          feeRecipient,
+          protocolFeePercent,
         ] = await Promise.all([
           readContract({ contract, method: "function name() view returns (string)" }),
           readContract({ contract, method: "function status() view returns (uint8)" }),
@@ -74,14 +103,20 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           readContract({ contract, method: "function usdcToken() view returns (address)" }),
           readContract({ contract, method: "function creator() view returns (address)" }),
           readContract({ contract, method: "function winner() view returns (address)" }),
+          readContract({ contract, method: "function winningTicketIndex() view returns (uint256)" }),
+          readContract({ contract, method: "function feeRecipient() view returns (address)" }),
+          readContract({ contract, method: "function protocolFeePercent() view returns (uint256)" }),
         ]);
 
         if (!alive) return;
 
+        const statusNum = Number(statusU8);
+
         setData({
           address: raffleAddress,
           name: String(name),
-          status: Number(status),
+          status: statusFromUint8(statusNum),
+
           sold: String(sold),
 
           ticketPrice: String(ticketPrice),
@@ -94,7 +129,12 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
 
           usdcToken: String(usdcToken),
           creator: String(creator),
+
           winner: String(winner),
+          winningTicketIndex: String(winningTicketIndex),
+
+          feeRecipient: String(feeRecipient),
+          protocolFeePercent: String(protocolFeePercent),
         });
       } catch {
         if (!alive) return;
