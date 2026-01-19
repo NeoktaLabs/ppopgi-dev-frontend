@@ -14,6 +14,7 @@ function formatDeadline(seconds: string) {
 }
 
 export function RaffleCard({ raffle, onOpen }: Props) {
+  const [shareOpen, setShareOpen] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
 
   const shareUrl = useMemo(() => {
@@ -62,138 +63,12 @@ export function RaffleCard({ raffle, onOpen }: Props) {
     cursor: "pointer",
   };
 
-  const shareBtn: React.CSSProperties = {
-    border: "1px solid rgba(0,0,0,0.15)",
-    background: "rgba(255,255,255,0.75)",
-    borderRadius: 999,
-    padding: "6px 10px",
-    cursor: "pointer",
-    fontSize: 12,
-    fontWeight: 700,
-  };
-
-  const shareRow: React.CSSProperties = {
-    marginTop: 10,
+  const topRow: React.CSSProperties = {
     display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "baseline",
   };
 
-  return (
-    <div
-      key={raffle.id}
-      style={cardStyle}
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpen(raffle.id)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onOpen(raffle.id);
-      }}
-      title="Open raffle"
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-        <div style={{ fontWeight: 800 }}>{raffle.name}</div>
-
-        {/* Share actions (don’t open modal) */}
-        <button
-          style={shareBtn}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onCopyLink();
-          }}
-          title="Copy raffle link"
-        >
-          Share
-        </button>
-      </div>
-
-      {copyMsg && (
-        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-          {copyMsg}
-        </div>
-      )}
-
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Win: {raffle.winningPot} USDC • Ticket: {raffle.ticketPrice} USDC
-      </div>
-
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Joined: {raffle.sold}
-        {raffle.maxTickets !== "0" ? ` / ${raffle.maxTickets}` : ""}
-      </div>
-
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Ends at: {formatDeadline(raffle.deadline)}
-      </div>
-
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Ppopgi fee: {raffle.protocolFeePercent}%
-      </div>
-
-      {/* Optional: quick share destinations (also don’t open modal) */}
-      <div style={shareRow}>
-        <button
-          style={shareBtn}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onCopyLink();
-          }}
-          title="Copy link"
-        >
-          Copy link
-        </button>
-
-        <button
-          style={shareBtn}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openShare(shareLinks.x);
-          }}
-          title="Share on X"
-        >
-          X
-        </button>
-
-        <button
-          style={shareBtn}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openShare(shareLinks.facebook);
-          }}
-          title="Share on Facebook"
-        >
-          Facebook
-        </button>
-
-        <button
-          style={shareBtn}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openShare(shareLinks.telegram);
-          }}
-          title="Share on Telegram"
-        >
-          Telegram
-        </button>
-
-        <button
-          style={shareBtn}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openShare(shareLinks.whatsapp);
-          }}
-          title="Share on WhatsApp"
-        >
-          WhatsApp
-        </button>
-      </div>
-    </div>
-  );
-}
+  const shareBtn: React.CSSProperties = {
+    border: "1px solid rgba(0
