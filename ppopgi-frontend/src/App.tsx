@@ -8,7 +8,6 @@ import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
 import { RaffleCard } from "./components/RaffleCard";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
-import { useExploreRaffles } from "./hooks/useExploreRaffles";
 
 import { ExplorePage } from "./pages/ExplorePage";
 
@@ -63,16 +62,13 @@ export default function App() {
   }, [account, setSession]);
 
   const { bigPrizes, endingSoon, note: homeNote, refetch: refetchHome } = useHomeRaffles();
-  const { items: exploreItems, note: exploreNote, refetch: refetchExplore } = useExploreRaffles();
 
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear.");
-    // home + explore both should refresh
+    // home should refresh
     refetchHome();
-    refetchExplore();
     window.setTimeout(() => {
       refetchHome();
-      refetchExplore();
     }, 3500);
   }
 
@@ -108,8 +104,6 @@ export default function App() {
   const sectionWrap: React.CSSProperties = { marginTop: 18 };
   const grid: React.CSSProperties = { marginTop: 8, display: "grid", gap: 10 };
 
-  const note = page === "home" ? homeNote : exploreNote;
-
   return (
     <div style={{ padding: 20 }}>
       <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
@@ -128,10 +122,7 @@ export default function App() {
             Explore
           </button>
 
-          <button
-            style={topBtn}
-            onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}
-          >
+          <button style={topBtn} onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
             Create
           </button>
         </div>
@@ -154,9 +145,10 @@ export default function App() {
         </div>
       </div>
 
-      {note && (
+      {/* Home-only note (ExplorePage shows its own note inside) */}
+      {page === "home" && homeNote && (
         <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>
-          {note}
+          {homeNote}
         </div>
       )}
 
@@ -175,9 +167,7 @@ export default function App() {
               {bigPrizes.map((r) => (
                 <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
               ))}
-              {bigPrizes.length === 0 && (
-                <div style={{ opacity: 0.8 }}>No open raffles right now.</div>
-              )}
+              {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
             </div>
           </div>
 
@@ -195,23 +185,15 @@ export default function App() {
 
       {/* EXPLORE */}
       {page === "explore" && (
-        <ExplorePage items={exploreItems} note={exploreNote} onOpenRaffle={openRaffle} />
+        <ExplorePage onOpenRaffle={openRaffle} />
       )}
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
 
-      <CreateRaffleModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={onCreatedRaffle}
-      />
+      <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
 
-      <RaffleDetailsModal
-        open={detailsOpen}
-        raffleId={selectedRaffleId}
-        onClose={() => setDetailsOpen(false)}
-      />
+      <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={() => setDetailsOpen(false)} />
     </div>
   );
 }
