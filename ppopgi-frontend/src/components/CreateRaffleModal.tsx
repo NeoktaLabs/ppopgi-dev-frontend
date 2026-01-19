@@ -3,7 +3,7 @@ import React, { useMemo, useState } from "react";
 import { parseUnits } from "ethers";
 import { ETHERLINK_MAINNET } from "../chain/etherlink";
 import { useFactoryConfig } from "../hooks/useFactoryConfig";
-import { CONTRACTS } from "../config/contracts";
+import { ADDRESSES } from "../config/contracts";
 
 import { getContract, prepareContractCall } from "thirdweb";
 import { useActiveAccount, useSendAndConfirmTransaction } from "thirdweb/react";
@@ -46,7 +46,7 @@ export function CreateRaffleModal({ open, onClose }: Props) {
     return getContract({
       client: thirdwebClient,
       chain: ETHERLINK_CHAIN,
-      address: CONTRACTS.SingleWinnerDeployer,
+      address: ADDRESSES.SingleWinnerDeployer,
     });
   }, []);
 
@@ -75,7 +75,7 @@ export function CreateRaffleModal({ open, onClose }: Props) {
       const minT = BigInt(toInt(minTickets, 0));
       const maxT = BigInt(toInt(maxTickets, 0));
       const durationSeconds = BigInt(toInt(durationHours, 0) * 3600);
-      const minPurchase = BigInt(toInt(minPurchaseAmount, 0));
+      const minPurchase = toInt(minPurchaseAmount, 0);
 
       const tx = prepareContractCall({
         contract: deployer,
