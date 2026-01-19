@@ -8,6 +8,9 @@ import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
 
+// ✅ thirdweb is the real connection source
+import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
+
 function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
@@ -19,8 +22,16 @@ function formatDeadline(seconds: string) {
 }
 
 export default function App() {
-  const account = useSession((s) => s.account);
-  const clear = useSession((s) => s.clear);
+  // session is now a mirror only (not source of truth)
+  const setSession = useSession((s) => s.set);
+  const clearSession = useSession((s) => s.clear);
+
+  // thirdweb connection (source of truth)
+  const activeAccount = useActiveAccount();
+  const activeWallet = useActiveWallet();
+  const { disconnect } = useDisconnect();
+
+  const account = activeAccount?.address ?? null;
 
   const [signInOpen, setSignInOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
@@ -28,7 +39,7 @@ export default function App() {
 
   const [createdHint, setCreatedHint] = useState<string | null>(null);
 
-  // ✅ raffle details modal state
+  // raffle details modal state
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedRaffleId, setSelectedRaffleId] = useState<string | null>(null);
 
@@ -41,6 +52,19 @@ export default function App() {
     setGateOpen(false);
   }
 
+  // ✅ keep Zustand session in sync with thirdweb
+  useEffect(() => {
+    if (!account) {
+      // if thirdweb disconnected, clear session mirror
+      setSession({ account: null, chainId: null, connector: null });
+      return;
+    }
+
+    // if connected, mirror it
+    // (chainId is set by SignInModal effect; we keep it as-is if not available here)
+    setSession({ account, connector: "thirdweb" });
+  }, [account, setSession]);
+
   const { bigPrizes, endingSoon, note, refetch } = useHomeRaffles();
 
   function onCreatedRaffle() {
@@ -52,6 +76,17 @@ export default function App() {
   function openRaffle(id: string) {
     setSelectedRaffleId(id);
     setDetailsOpen(true);
+  }
+
+  async function onSignOut() {
+    // ✅ real sign-out must disconnect thirdweb
+    try {
+      if (activeWallet) disconnect(activeWallet);
+    } catch {
+      // ignore
+    }
+    clearSession();
+    setCreatedHint(null);
   }
 
   const cardStyle: React.CSSProperties = {
@@ -85,14 +120,7 @@ export default function App() {
           ) : (
             <>
               <span>Your account: {short(account)}</span>
-              <button
-                onClick={() => {
-                  clear();
-                  setCreatedHint(null);
-                }}
-              >
-                Sign out
-              </button>
+              <button onClick={onSignOut}>Sign out</button>
             </>
           )}
         </div>
