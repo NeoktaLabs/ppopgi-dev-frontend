@@ -6,10 +6,9 @@ import { DisclaimerGate } from "./components/DisclaimerGate";
 import { CreateRaffleModal } from "./components/CreateRaffleModal";
 import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
 import { RaffleCard } from "./components/RaffleCard";
-import { CashierModal } from "./components/CashierModal";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
-import { useExploreRaffles } from "./hooks/useExploreRaffles";
+
 import { ExplorePage } from "./pages/ExplorePage";
 
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
@@ -21,9 +20,11 @@ function short(a: string) {
 type Page = "home" | "explore";
 
 export default function App() {
+  // zustand session is a mirror only
   const setSession = useSession((s) => s.set);
   const clearSession = useSession((s) => s.clear);
 
+  // thirdweb is source of truth
   const activeAccount = useActiveAccount();
   const activeWallet = useActiveWallet();
   const { disconnect } = useDisconnect();
@@ -35,10 +36,10 @@ export default function App() {
   const [signInOpen, setSignInOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [cashierOpen, setCashierOpen] = useState(false);
 
   const [createdHint, setCreatedHint] = useState<string | null>(null);
 
+  // raffle details modal state
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedRaffleId, setSelectedRaffleId] = useState<string | null>(null);
 
@@ -51,6 +52,7 @@ export default function App() {
     setGateOpen(false);
   }
 
+  // keep Zustand session in sync with thirdweb (NO chainId)
   useEffect(() => {
     if (!account) {
       setSession({ account: null, connector: null });
@@ -60,15 +62,13 @@ export default function App() {
   }, [account, setSession]);
 
   const { bigPrizes, endingSoon, note: homeNote, refetch: refetchHome } = useHomeRaffles();
-  const { items: exploreItems, note: exploreNote, refetch: refetchExplore } = useExploreRaffles();
 
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear.");
+    // home should refresh
     refetchHome();
-    refetchExplore();
     window.setTimeout(() => {
       refetchHome();
-      refetchExplore();
     }, 3500);
   }
 
@@ -80,7 +80,9 @@ export default function App() {
   async function onSignOut() {
     try {
       if (activeWallet) disconnect(activeWallet);
-    } catch {}
+    } catch {
+      // ignore
+    }
     clearSession();
     setCreatedHint(null);
   }
@@ -102,8 +104,6 @@ export default function App() {
   const sectionWrap: React.CSSProperties = { marginTop: 18 };
   const grid: React.CSSProperties = { marginTop: 8, display: "grid", gap: 10 };
 
-  const note = page === "home" ? homeNote : exploreNote;
-
   return (
     <div style={{ padding: 20 }}>
       <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
@@ -122,18 +122,13 @@ export default function App() {
             Explore
           </button>
 
-          <button
-            style={topBtn}
-            onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}
-          >
+          <button style={topBtn} onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
             Create
           </button>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button style={topBtn} onClick={() => setCashierOpen(true)}>
-            Cashier
-          </button>
+          <button style={topBtn}>Cashier</button>
 
           {!account ? (
             <button style={topBtn} onClick={() => setSignInOpen(true)}>
@@ -150,9 +145,18 @@ export default function App() {
         </div>
       </div>
 
-      {note && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>{note}</div>}
+      {/* Home-only note (ExplorePage shows its own note inside) */}
+      {page === "home" && homeNote && (
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>
+          {homeNote}
+        </div>
+      )}
 
-      {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>{createdHint}</div>}
+      {createdHint && (
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
+          {createdHint}
+        </div>
+      )}
 
       {/* HOME */}
       {page === "home" && (
@@ -181,15 +185,13 @@ export default function App() {
 
       {/* EXPLORE */}
       {page === "explore" && (
-        <ExplorePage items={exploreItems} note={exploreNote} onOpenRaffle={openRaffle} />
+        <ExplorePage onOpenRaffle={openRaffle} />
       )}
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
 
       <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
-
-      <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} />
 
       <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={() => setDetailsOpen(false)} />
     </div>
