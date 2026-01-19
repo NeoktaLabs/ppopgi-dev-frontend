@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getContract, readContract } from "thirdweb";
 import { thirdwebClient } from "../thirdweb/client";
 import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
+import { getAddress } from "ethers";
 
 export type RaffleStatus =
   | "FUNDING_PENDING"
@@ -13,7 +14,6 @@ export type RaffleStatus =
   | "UNKNOWN";
 
 function statusFromUint8(n: number): RaffleStatus {
-  // Keep this mapping aligned with your contract enum
   if (n === 0) return "FUNDING_PENDING";
   if (n === 1) return "OPEN";
   if (n === 2) return "DRAWING";
@@ -30,42 +30,82 @@ export type RaffleDetails = {
 
   sold: string;
 
-  ticketPrice: string; // uint256 (USDC 6 decimals) as string
-  winningPot: string; // uint256 (USDC 6 decimals) as string
+  ticketPrice: string; // uint256 raw (USDC 6 decimals)
+  winningPot: string; // uint256 raw (USDC 6 decimals)
 
-  minTickets: string; // uint64 as string
-  maxTickets: string; // uint64 as string
-  deadline: string; // uint64 unix seconds as string
+  minTickets: string; // uint64 raw
+  maxTickets: string; // uint64 raw
+  deadline: string; // uint64 unix seconds
   paused: boolean;
 
   usdcToken: string;
   creator: string;
 
-  // settlement
   winner: string;
   winningTicketIndex: string;
 
-  // fee transparency
   feeRecipient: string;
   protocolFeePercent: string;
 };
+
+async function readFirst(
+  contract: any,
+  label: string,
+  candidates: string[]
+): Promise<any> {
+  let lastErr: any = null;
+  for (const method of candidates) {
+    try {
+      return await readContract({ contract, method });
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  // Helpful debug (won’t break UI)
+  // eslint-disable-next-line no-console
+  console.warn(`[useRaffleDetails] Failed to read ${label}. Tried:`, candidates, lastErr);
+  throw lastErr;
+}
+
+async function readFirstOr(
+  contract: any,
+  label: string,
+  candidates: string[],
+  fallback: any
+): Promise<any> {
+  try {
+    return await readFirst(contract, label, candidates);
+  } catch {
+    return fallback;
+  }
+}
 
 export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
   const [data, setData] = useState<RaffleDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  const contract = useMemo(() => {
+  const normalizedAddress = useMemo(() => {
     if (!raffleAddress) return null;
+    try {
+      // checksum for safety; lowercase is fine too
+      return getAddress(raffleAddress);
+    } catch {
+      return raffleAddress;
+    }
+  }, [raffleAddress]);
+
+  const contract = useMemo(() => {
+    if (!normalizedAddress) return null;
     return getContract({
       client: thirdwebClient,
       chain: ETHERLINK_CHAIN,
-      address: raffleAddress,
+      address: normalizedAddress,
     });
-  }, [raffleAddress]);
+  }, [normalizedAddress]);
 
   useEffect(() => {
-    if (!open || !contract || !raffleAddress) return;
+    if (!open || !contract || !normalizedAddress) return;
 
     let alive = true;
 
@@ -74,51 +114,83 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
       setNote(null);
 
       try {
-        const [
-          name,
-          statusU8,
-          sold,
-          ticketPrice,
-          winningPot,
-          minTickets,
-          maxTickets,
-          deadline,
-          paused,
-          usdcToken,
-          creator,
-          winner,
-          winningTicketIndex,
-          feeRecipient,
-          protocolFeePercent,
-        ] = await Promise.all([
-          readContract({ contract, method: "function name() view returns (string)" }),
-          readContract({ contract, method: "function status() view returns (uint8)" }),
-          readContract({ contract, method: "function getSold() view returns (uint256)" }),
-          readContract({ contract, method: "function ticketPrice() view returns (uint256)" }),
-          readContract({ contract, method: "function winningPot() view returns (uint256)" }),
-          readContract({ contract, method: "function minTickets() view returns (uint64)" }),
-          readContract({ contract, method: "function maxTickets() view returns (uint64)" }),
-          readContract({ contract, method: "function deadline() view returns (uint64)" }),
-          readContract({ contract, method: "function paused() view returns (bool)" }),
-          readContract({ contract, method: "function usdcToken() view returns (address)" }),
-          readContract({ contract, method: "function creator() view returns (address)" }),
-          readContract({ contract, method: "function winner() view returns (address)" }),
-          readContract({ contract, method: "function winningTicketIndex() view returns (uint256)" }),
-          readContract({ contract, method: "function feeRecipient() view returns (address)" }),
-          readContract({ contract, method: "function protocolFeePercent() view returns (uint256)" }),
-        ]);
+        // IMPORTANT: each field is resilient now.
+        const name = await readFirstOr(contract, "name", [
+          "function name() view returns (string)",
+        ], "Unknown raffle");
+
+        const statusU8 = await readFirstOr(contract, "status", [
+          "function status() view returns (uint8)",
+        ], 255);
+
+        const sold = await readFirstOr(contract, "sold", [
+          "function getSold() view returns (uint256)",
+          "function sold() view returns (uint256)",
+          "function ticketsSold() view returns (uint256)",
+        ], 0n);
+
+        const ticketPrice = await readFirstOr(contract, "ticketPrice", [
+          "function ticketPrice() view returns (uint256)",
+          "function getTicketPrice() view returns (uint256)",
+        ], 0n);
+
+        const winningPot = await readFirstOr(contract, "winningPot", [
+          "function winningPot() view returns (uint256)",
+          "function getWinningPot() view returns (uint256)",
+        ], 0n);
+
+        const minTickets = await readFirstOr(contract, "minTickets", [
+          "function minTickets() view returns (uint64)",
+        ], 0);
+
+        const maxTickets = await readFirstOr(contract, "maxTickets", [
+          "function maxTickets() view returns (uint64)",
+        ], 0);
+
+        const deadline = await readFirstOr(contract, "deadline", [
+          "function deadline() view returns (uint64)",
+        ], 0);
+
+        const paused = await readFirstOr(contract, "paused", [
+          "function paused() view returns (bool)",
+        ], false);
+
+        // USDC token address name varies a lot across contracts:
+        const usdcToken = await readFirstOr(contract, "usdcToken", [
+          "function usdcToken() view returns (address)",
+          "function usdc() view returns (address)",
+          "function USDC() view returns (address)",
+        ], "0x0000000000000000000000000000000000000000");
+
+        const creator = await readFirstOr(contract, "creator", [
+          "function creator() view returns (address)",
+          "function owner() view returns (address)",
+        ], "0x0000000000000000000000000000000000000000");
+
+        const winner = await readFirstOr(contract, "winner", [
+          "function winner() view returns (address)",
+        ], "0x0000000000000000000000000000000000000000");
+
+        const winningTicketIndex = await readFirstOr(contract, "winningTicketIndex", [
+          "function winningTicketIndex() view returns (uint256)",
+        ], 0n);
+
+        const feeRecipient = await readFirstOr(contract, "feeRecipient", [
+          "function feeRecipient() view returns (address)",
+        ], "0x0000000000000000000000000000000000000000");
+
+        const protocolFeePercent = await readFirstOr(contract, "protocolFeePercent", [
+          "function protocolFeePercent() view returns (uint256)",
+        ], 0n);
 
         if (!alive) return;
 
-        const statusNum = Number(statusU8);
-
         setData({
-          address: raffleAddress,
+          address: normalizedAddress,
           name: String(name),
-          status: statusFromUint8(statusNum),
+          status: statusFromUint8(Number(statusU8)),
 
           sold: String(sold),
-
           ticketPrice: String(ticketPrice),
           winningPot: String(winningPot),
 
@@ -136,10 +208,17 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           feeRecipient: String(feeRecipient),
           protocolFeePercent: String(protocolFeePercent),
         });
-      } catch {
+
+        // If some fields were missing, we can show a soft note:
+        if (String(name) === "Unknown raffle") {
+          setNote("Some live fields could not be read yet, but the raffle is reachable.");
+        }
+      } catch (e: any) {
         if (!alive) return;
         setData(null);
-        setNote("Could not load this raffle right now. Please try again.");
+
+        // Make the note slightly more actionable
+        setNote("Could not load this raffle right now. Please refresh (and check console logs).");
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -149,7 +228,7 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
     return () => {
       alive = false;
     };
-  }, [open, contract, raffleAddress]);
+  }, [open, contract, normalizedAddress]);
 
   return { data, loading, note };
 }
