@@ -32,6 +32,7 @@ export async function fetchRafflesFromSubgraph(signal?: AbortSignal): Promise<Ra
         id
         name
         status
+        creator
         winningPot
         ticketPrice
         deadline
