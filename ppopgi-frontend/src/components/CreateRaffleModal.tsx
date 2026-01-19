@@ -51,8 +51,8 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   });
 
   // Basic sanity limits (keeps users from accidentally typing nonsense)
-  const minT = toInt(minTickets, 0);
-  const maxT = toInt(maxTickets, 0);
+  const minT = BigInt(toInt(minTickets, 0));
+  const maxT = BigInt(toInt(maxTickets, 0));
   const durH = toInt(durationHours, 0);
   const minPurchase = toInt(minPurchaseAmount, 0);
 
@@ -80,7 +80,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
       const winningPotU = parseUnits(winningPot || "0", 6);
 
       // ✅ IMPORTANT: thirdweb prepareContractCall expects `number` for uint64/uint32 here
-      const durationSeconds = durH * 3600;
+      const durationSeconds = BigInt(toInt(durationHours, 0) * 3600)
 
       const tx = prepareContractCall({
         contract: deployer,
