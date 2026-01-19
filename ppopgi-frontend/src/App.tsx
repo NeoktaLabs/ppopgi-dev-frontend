@@ -20,6 +20,27 @@ function short(a: string) {
 
 type Page = "home" | "explore";
 
+function getRaffleFromUrl(): string | null {
+  try {
+    const url = new URL(window.location.href);
+    const r = url.searchParams.get("raffle");
+    return r && r.trim() ? r.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function setRaffleInUrl(id: string | null) {
+  try {
+    const url = new URL(window.location.href);
+    if (!id) url.searchParams.delete("raffle");
+    else url.searchParams.set("raffle", id);
+    window.history.replaceState({}, "", url.toString());
+  } catch {
+    // ignore
+  }
+}
+
 export default function App() {
   // zustand session is a mirror only
   const setSession = useSession((s) => s.set);
@@ -66,7 +87,6 @@ export default function App() {
 
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear.");
-    // home should refresh
     refetchHome();
     window.setTimeout(() => {
       refetchHome();
@@ -76,7 +96,22 @@ export default function App() {
   function openRaffle(id: string) {
     setSelectedRaffleId(id);
     setDetailsOpen(true);
+    setRaffleInUrl(id);
   }
+
+  function closeRaffle() {
+    setDetailsOpen(false);
+    setRaffleInUrl(null);
+  }
+
+  // ✅ Auto-open from shared link: ?raffle=0x...
+  useEffect(() => {
+    const fromUrl = getRaffleFromUrl();
+    if (fromUrl) {
+      setSelectedRaffleId(fromUrl);
+      setDetailsOpen(true);
+    }
+  }, []);
 
   async function onSignOut() {
     try {
@@ -123,7 +158,10 @@ export default function App() {
             Explore
           </button>
 
-          <button style={topBtn} onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
+          <button
+            style={topBtn}
+            onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}
+          >
             Create
           </button>
         </div>
@@ -170,7 +208,9 @@ export default function App() {
               {bigPrizes.map((r) => (
                 <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
               ))}
-              {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
+              {bigPrizes.length === 0 && (
+                <div style={{ opacity: 0.8 }}>No open raffles right now.</div>
+              )}
             </div>
           </div>
 
@@ -180,7 +220,9 @@ export default function App() {
               {endingSoon.map((r) => (
                 <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
               ))}
-              {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
+              {endingSoon.length === 0 && (
+                <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>
+              )}
             </div>
           </div>
         </>
@@ -201,14 +243,14 @@ export default function App() {
       <RaffleDetailsModal
         open={detailsOpen}
         raffleId={selectedRaffleId}
-        onClose={() => setDetailsOpen(false)}
+        onClose={closeRaffle}
       />
 
       <CashierModal
-  open={cashierOpen}
-  onClose={() => setCashierOpen(false)}
-  onOpenRaffle={openRaffle}
-/>
+        open={cashierOpen}
+        onClose={() => setCashierOpen(false)}
+        onOpenRaffle={openRaffle}
+      />
     </div>
   );
 }
