@@ -1,6 +1,6 @@
 // src/pages/ExplorePage.tsx
 import React, { useMemo, useState } from "react";
-import type { RaffleListItem, RaffleStatus } from "../indexer/subgraph";
+import type { RaffleStatus } from "../indexer/subgraph";
 import { RaffleCard } from "../components/RaffleCard";
 import { useExploreRaffles } from "../hooks/useExploreRaffles";
 
@@ -8,6 +8,10 @@ import { useExploreRaffles } from "../hooks/useExploreRaffles";
 import { useActiveAccount } from "thirdweb/react";
 
 type SortMode = "endingSoon" | "bigPrize" | "newest";
+
+type Props = {
+  onOpenRaffle: (id: string) => void;
+};
 
 function norm(s: string) {
   return s.trim().toLowerCase();
@@ -17,7 +21,7 @@ function isActiveStatus(status: RaffleStatus) {
   return status === "OPEN" || status === "FUNDING_PENDING";
 }
 
-export function ExplorePage() {
+export function ExplorePage({ onOpenRaffle }: Props) {
   const { items, note } = useExploreRaffles(500);
 
   const activeAccount = useActiveAccount();
@@ -82,13 +86,6 @@ export function ExplorePage() {
     return sorted;
   }, [items, q, status, sort, openOnly, myRafflesOnly, me]);
 
-  // For now: clicking a card can just alert the address
-  // Later: we can open the same RaffleDetailsModal like Home does.
-  function onOpenRaffle(id: string) {
-    // temporary safe default; replace with your modal open handler later
-    window.alert(id);
-  }
-
   const input: React.CSSProperties = {
     width: "100%",
     border: "1px solid rgba(255,255,255,0.55)",
@@ -99,7 +96,7 @@ export function ExplorePage() {
     color: "#2B2B33",
   };
 
-  const select: React.CSSProperties = {
+  const selectStyle: React.CSSProperties = {
     ...input,
     cursor: "pointer",
   };
@@ -168,7 +165,7 @@ export function ExplorePage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div>
             <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 6 }}>Status</div>
-            <select style={select} value={status} onChange={(e) => setStatus(e.target.value as any)}>
+            <select style={selectStyle} value={status} onChange={(e) => setStatus(e.target.value as any)}>
               <option value="ALL">All</option>
               <option value="FUNDING_PENDING">Getting ready</option>
               <option value="OPEN">Open</option>
@@ -180,7 +177,7 @@ export function ExplorePage() {
 
           <div>
             <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 6 }}>Sort</div>
-            <select style={select} value={sort} onChange={(e) => setSort(e.target.value as SortMode)}>
+            <select style={selectStyle} value={sort} onChange={(e) => setSort(e.target.value as SortMode)}>
               <option value="endingSoon">Ending soon</option>
               <option value="bigPrize">Big prize</option>
               <option value="newest">Newest</option>
