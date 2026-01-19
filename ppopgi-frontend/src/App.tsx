@@ -128,7 +128,9 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button style={topBtn}>Cashier</button>
+          <button style={topBtn} onClick={() => setCashierOpen(true)}>
+            Cashier
+          </button>
 
           {!account ? (
             <button style={topBtn} onClick={() => setSignInOpen(true)}>
