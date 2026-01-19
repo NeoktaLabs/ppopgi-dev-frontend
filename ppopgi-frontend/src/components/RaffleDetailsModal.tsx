@@ -1,5 +1,6 @@
 // src/components/RaffleDetailsModal.tsx
 import React, { useMemo, useState } from "react";
+import { formatUnits } from "ethers";
 import { useRaffleDetails } from "../hooks/useRaffleDetails";
 import { SafetyProofModal } from "./SafetyProofModal";
 
@@ -29,8 +30,16 @@ function formatTime(seconds: string) {
   return new Date(n * 1000).toLocaleString();
 }
 
+function fmtUsdc(raw: string) {
+  try {
+    return formatUnits(BigInt(raw), 6);
+  } catch {
+    return "0";
+  }
+}
+
 export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
-  const { data, loading, note } = useRaffleDetails(open ? raffleId : null);
+  const { data, loading, note } = useRaffleDetails(raffleId, open);
   const [safetyOpen, setSafetyOpen] = useState(false);
 
   const canShowWinner = useMemo(() => data?.status === "COMPLETED", [data?.status]);
@@ -87,6 +96,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           <div>
             <div style={{ fontSize: 12, opacity: 0.85 }}>Raffle</div>
             <div style={{ fontSize: 18, fontWeight: 800 }}>{data?.name ?? "Loading…"}</div>
+            {raffleId ? (
+              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>{raffleId}</div>
+            ) : null}
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
@@ -121,16 +133,10 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
         </div>
 
         {loading && (
-          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-            Loading live details…
-          </div>
+          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Loading live details…</div>
         )}
 
-        {note && (
-          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-            {note}
-          </div>
-        )}
+        {note && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{note}</div>}
 
         {data && (
           <>
@@ -163,12 +169,12 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
               <div style={row}>
                 <div style={label}>Ticket</div>
-                <div style={value}>{data.ticketPrice} USDC</div>
+                <div style={value}>{fmtUsdc(data.ticketPrice)} USDC</div>
               </div>
 
               <div style={row}>
                 <div style={label}>Win</div>
-                <div style={value}>{data.winningPot} USDC</div>
+                <div style={value}>{fmtUsdc(data.winningPot)} USDC</div>
               </div>
 
               <div style={row}>
@@ -195,7 +201,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                 </div>
                 <div style={row}>
                   <div style={label}>Prize</div>
-                  <div style={value}>{data.winningPot} USDC</div>
+                  <div style={value}>{fmtUsdc(data.winningPot)} USDC</div>
                 </div>
               </div>
             ) : (
@@ -210,11 +216,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
         )}
 
         {data && (
-          <SafetyProofModal
-            open={safetyOpen}
-            onClose={() => setSafetyOpen(false)}
-            raffle={data}
-          />
+          <SafetyProofModal open={safetyOpen} onClose={() => setSafetyOpen(false)} raffle={data} />
         )}
       </div>
     </div>
