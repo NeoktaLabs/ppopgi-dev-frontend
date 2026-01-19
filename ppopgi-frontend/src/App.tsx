@@ -4,6 +4,7 @@ import { useSession } from "./state/useSession";
 import { SignInModal } from "./components/SignInModal";
 import { DisclaimerGate } from "./components/DisclaimerGate";
 import { CreateRaffleModal } from "./components/CreateRaffleModal";
+import { RaffleDetailsModal } from "./components/RaffleDetailsModal";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./state/disclaimer";
 import { useHomeRaffles } from "./hooks/useHomeRaffles";
 
@@ -27,6 +28,10 @@ export default function App() {
 
   const [createdHint, setCreatedHint] = useState<string | null>(null);
 
+  // ✅ raffle details modal state
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedRaffleId, setSelectedRaffleId] = useState<string | null>(null);
+
   useEffect(() => {
     setGateOpen(!hasAcceptedDisclaimer());
   }, []);
@@ -41,10 +46,20 @@ export default function App() {
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear on the home page.");
     refetch();
-
-    // helpful second pull (subgraph indexing delay)
     window.setTimeout(() => refetch(), 3500);
   }
+
+  function openRaffle(id: string) {
+    setSelectedRaffleId(id);
+    setDetailsOpen(true);
+  }
+
+  const cardStyle: React.CSSProperties = {
+    padding: 12,
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    cursor: "pointer",
+  };
 
   return (
     <div style={{ padding: 20 }}>
@@ -100,7 +115,17 @@ export default function App() {
         <h3 style={{ margin: 0 }}>Big prizes right now</h3>
         <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
           {bigPrizes.map((r) => (
-            <div key={r.id} style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
+            <div
+              key={r.id}
+              style={cardStyle}
+              role="button"
+              tabIndex={0}
+              onClick={() => openRaffle(r.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") openRaffle(r.id);
+              }}
+              title="Open raffle"
+            >
               <div style={{ fontWeight: 700 }}>{r.name}</div>
               <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
                 Win: {r.winningPot} USDC • Ticket: {r.ticketPrice} USDC
@@ -122,7 +147,17 @@ export default function App() {
         <h3 style={{ margin: 0 }}>Ending soon</h3>
         <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
           {endingSoon.map((r) => (
-            <div key={r.id} style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
+            <div
+              key={r.id}
+              style={cardStyle}
+              role="button"
+              tabIndex={0}
+              onClick={() => openRaffle(r.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") openRaffle(r.id);
+              }}
+              title="Open raffle"
+            >
               <div style={{ fontWeight: 700 }}>{r.name}</div>
               <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
                 Ticket: {r.ticketPrice} USDC
@@ -138,10 +173,17 @@ export default function App() {
 
       {/* Modals */}
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
+
       <CreateRaffleModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={onCreatedRaffle}
+      />
+
+      <RaffleDetailsModal
+        open={detailsOpen}
+        raffleId={selectedRaffleId}
+        onClose={() => setDetailsOpen(false)}
       />
     </div>
   );
