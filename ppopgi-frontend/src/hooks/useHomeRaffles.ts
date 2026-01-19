@@ -1,5 +1,5 @@
 // src/hooks/useHomeRaffles.ts
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { fetchRafflesFromSubgraph } from "../indexer/subgraph";
 import { fetchRafflesOnChainFallback } from "../onchain/fallbackRaffles";
@@ -11,16 +11,23 @@ export function useHomeRaffles() {
   const [mode, setMode] = useState<Mode>("indexer");
   const [note, setNote] = useState<string | null>(null);
 
+  // ✅ allows App to trigger reload
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refetch = useCallback(() => setRefreshKey((x) => x + 1), []);
+
   useEffect(() => {
     let alive = true;
     const controller = new AbortController();
 
     (async () => {
+      // reset state for a clean refetch UX
+      setNote(null);
+
       // 1) indexer-first (with timeout)
       try {
-        const t = setTimeout(() => controller.abort(), 4500);
+        const t = window.setTimeout(() => controller.abort(), 4500);
         const data = await fetchRafflesFromSubgraph(controller.signal);
-        clearTimeout(t);
+        window.clearTimeout(t);
 
         if (!alive) return;
         setMode("indexer");
@@ -52,27 +59,36 @@ export function useHomeRaffles() {
       alive = false;
       controller.abort();
     };
-  }, []);
+  }, [refreshKey]); // ✅ refetch triggers this
 
   const active = useMemo(() => {
     const all = items ?? [];
     return all.filter((r) => r.status === "OPEN" || r.status === "FUNDING_PENDING");
   }, [items]);
 
-  // Big prizes: top 3 active by winningPot
+  // ✅ Big prizes: top 3 active by winningPot (descending)
   const bigPrizes = useMemo(() => {
     return [...active]
-      .sort((a, b) => BigInt(b.winningPot) > BigInt(a.winningPot) ? 1 : -1)
+      .sort((a, b) => {
+        const A = BigInt(a.winningPot || "0");
+        const B = BigInt(b.winningPot || "0");
+        if (A === B) return 0;
+        return A > B ? -1 : 1; // descending
+      })
       .slice(0, 3);
   }, [active]);
 
-  // Ending soon: top 5 OPEN by deadline ascending
+  // ✅ Ending soon: top 5 OPEN by deadline ascending
   const endingSoon = useMemo(() => {
     return [...active]
       .filter((r) => r.status === "OPEN")
-      .sort((a, b) => Number(a.deadline) - Number(b.deadline))
+      .sort((a, b) => {
+        const A = Number(a.deadline || "0");
+        const B = Number(b.deadline || "0");
+        return A - B;
+      })
       .slice(0, 5);
   }, [active]);
 
-  return { items, bigPrizes, endingSoon, mode, note };
+  return { items, bigPrizes, endingSoon, mode, note, refetch };
 }
