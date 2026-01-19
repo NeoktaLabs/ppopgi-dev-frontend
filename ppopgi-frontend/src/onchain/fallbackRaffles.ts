@@ -1,5 +1,5 @@
 // src/onchain/fallbackRaffles.ts
-import { BrowserProvider, Contract, JsonRpcProvider } from "ethers";
+import { Contract, JsonRpcProvider } from "ethers";
 import { ADDRESSES } from "../config/contracts";
 import LotteryRegistryAbi from "../config/abis/LotteryRegistry.json";
 import LotterySingleWinnerAbi from "../config/abis/LotterySingleWinner.json";
@@ -34,7 +34,7 @@ export async function fetchRafflesOnChainFallback(limit = 120): Promise<RaffleLi
   const maxToLoad = Math.min(limit, count);
 
   // Load newest first (end of list)
-  let start = Math.max(0, count - maxToLoad);
+  const start = Math.max(0, count - maxToLoad);
   const addrs: string[] = [];
 
   for (let i = start; i < count; i += pageSize) {
@@ -42,12 +42,11 @@ export async function fetchRafflesOnChainFallback(limit = 120): Promise<RaffleLi
     for (const a of page as string[]) addrs.push(a);
   }
 
-  // Read each raffle with minimal calls
   const out: RaffleListItem[] = [];
+
   for (const addr of addrs) {
     const raffle = new Contract(addr, LotterySingleWinnerAbi, rpc);
 
-    // parallel reads
     const [
       name,
       statusU8,
@@ -59,6 +58,7 @@ export async function fetchRafflesOnChainFallback(limit = 120): Promise<RaffleLi
       protocolFeePercent,
       feeRecipient,
       deployer,
+      creator, // ✅ add creator
     ] = await Promise.all([
       raffle.name(),
       raffle.status(),
@@ -70,6 +70,7 @@ export async function fetchRafflesOnChainFallback(limit = 120): Promise<RaffleLi
       raffle.protocolFeePercent(),
       raffle.feeRecipient(),
       raffle.deployer(),
+      raffle.creator(), // ✅ exists in your ABI
     ]);
 
     out.push({
@@ -84,6 +85,7 @@ export async function fetchRafflesOnChainFallback(limit = 120): Promise<RaffleLi
       protocolFeePercent: protocolFeePercent.toString(),
       feeRecipient: String(feeRecipient),
       deployer: String(deployer),
+      creator: String(creator), // ✅ FIX for TS
       lastUpdatedTimestamp: null,
     });
   }
