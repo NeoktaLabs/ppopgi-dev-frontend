@@ -36,7 +36,7 @@ export default function App() {
   const [signInOpen, setSignInOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-
+  const [cashierOpen, setCashierOpen] = useState(false);
   const [createdHint, setCreatedHint] = useState<string | null>(null);
 
   // raffle details modal state
