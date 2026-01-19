@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+// src/components/RaffleCard.tsx
+import React, { useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
-import { Toast } from "./Toast";
 
 type Props = {
   raffle: RaffleListItem;
@@ -13,104 +13,187 @@ function formatDeadline(seconds: string) {
   return new Date(n * 1000).toLocaleString();
 }
 
-// IMPORTANT: Always share ONLY ?raffle=0x... (no text/title params)
-function buildRaffleUrl(raffleId: string) {
-  const u = new URL(window.location.href);
-  u.search = `?raffle=${raffleId}`;
-  return u.toString();
-}
-
 export function RaffleCard({ raffle, onOpen }: Props) {
-  const [toast, setToast] = useState<string | null>(null);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+
+  const shareUrl = useMemo(() => {
+    const u = new URL(window.location.href);
+    u.search = `?raffle=${raffle.id}`;
+    return u.toString();
+  }, [raffle.id]);
+
+  const shareText = useMemo(() => {
+    const name = raffle?.name ? `Join this raffle: ${raffle.name}` : "Join this raffle";
+    return name;
+  }, [raffle?.name]);
+
+  const shareLinks = useMemo(() => {
+    const url = encodeURIComponent(shareUrl);
+    const text = encodeURIComponent(shareText);
+
+    return {
+      x: `https://twitter.com/intent/tweet?url=${url}&text=${text}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}`,
+      telegram: `https://t.me/share/url?url=${url}&text=${text}`,
+      whatsapp: `https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`,
+    };
+  }, [shareUrl, shareText]);
+
+  async function onCopyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopyMsg("Link copied.");
+      window.setTimeout(() => setCopyMsg(null), 1200);
+    } catch {
+      window.prompt("Copy this link:", shareUrl);
+      setCopyMsg("Copy the link.");
+      window.setTimeout(() => setCopyMsg(null), 1200);
+    }
+  }
+
+  function openShare(url: string) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 
   const cardStyle: React.CSSProperties = {
     padding: 12,
     border: "1px solid #ddd",
     borderRadius: 12,
     cursor: "pointer",
-    position: "relative",
   };
 
-  const iconBtn: React.CSSProperties = {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    border: "1px solid rgba(0,0,0,0.12)",
+  const shareBtn: React.CSSProperties = {
+    border: "1px solid rgba(0,0,0,0.15)",
     background: "rgba(255,255,255,0.75)",
+    borderRadius: 999,
+    padding: "6px 10px",
     cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    fontSize: 12,
+    fontWeight: 700,
   };
 
-  function showToast(msg: string) {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 1200);
-  }
-
-  async function onCopyLink(e: React.MouseEvent) {
-    e.stopPropagation();
-
-    const url = buildRaffleUrl(raffle.id);
-
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast("Link copied");
-    } catch {
-      // fallback
-      window.prompt("Copy this link:", url);
-      showToast("Copy the link");
-    }
-  }
+  const shareRow: React.CSSProperties = {
+    marginTop: 10,
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    alignItems: "center",
+  };
 
   return (
-    <>
-      <div
-        key={raffle.id}
-        style={cardStyle}
-        role="button"
-        tabIndex={0}
-        onClick={() => onOpen(raffle.id)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onOpen(raffle.id);
-        }}
-        title="Open raffle"
-      >
-        {/* Share icon button */}
+    <div
+      key={raffle.id}
+      style={cardStyle}
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(raffle.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onOpen(raffle.id);
+      }}
+      title="Open raffle"
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+        <div style={{ fontWeight: 800 }}>{raffle.name}</div>
+
+        {/* Share actions (don’t open modal) */}
         <button
-          type="button"
-          onClick={onCopyLink}
-          style={iconBtn}
-          aria-label="Copy raffle link"
-          title="Copy link"
+          style={shareBtn}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onCopyLink();
+          }}
+          title="Copy raffle link"
         >
-          <span aria-hidden style={{ fontSize: 16, lineHeight: 1 }}>↗</span>
+          Share
         </button>
-
-        <div style={{ fontWeight: 800, paddingRight: 60 }}>{raffle.name}</div>
-
-        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-          Win: {raffle.winningPot} USDC • Ticket: {raffle.ticketPrice} USDC
-        </div>
-
-        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-          Joined: {raffle.sold}
-          {raffle.maxTickets !== "0" ? ` / ${raffle.maxTickets}` : ""}
-        </div>
-
-        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-          Ends at: {formatDeadline(raffle.deadline)}
-        </div>
-
-        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-          Ppopgi fee: {raffle.protocolFeePercent}%
-        </div>
       </div>
 
-      <Toast text={toast} />
-    </>
+      {copyMsg && (
+        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+          {copyMsg}
+        </div>
+      )}
+
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
+        Win: {raffle.winningPot} USDC • Ticket: {raffle.ticketPrice} USDC
+      </div>
+
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
+        Joined: {raffle.sold}
+        {raffle.maxTickets !== "0" ? ` / ${raffle.maxTickets}` : ""}
+      </div>
+
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
+        Ends at: {formatDeadline(raffle.deadline)}
+      </div>
+
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
+        Ppopgi fee: {raffle.protocolFeePercent}%
+      </div>
+
+      {/* Optional: quick share destinations (also don’t open modal) */}
+      <div style={shareRow}>
+        <button
+          style={shareBtn}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onCopyLink();
+          }}
+          title="Copy link"
+        >
+          Copy link
+        </button>
+
+        <button
+          style={shareBtn}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openShare(shareLinks.x);
+          }}
+          title="Share on X"
+        >
+          X
+        </button>
+
+        <button
+          style={shareBtn}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openShare(shareLinks.facebook);
+          }}
+          title="Share on Facebook"
+        >
+          Facebook
+        </button>
+
+        <button
+          style={shareBtn}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openShare(shareLinks.telegram);
+          }}
+          title="Share on Telegram"
+        >
+          Telegram
+        </button>
+
+        <button
+          style={shareBtn}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openShare(shareLinks.whatsapp);
+          }}
+          title="Share on WhatsApp"
+        >
+          WhatsApp
+        </button>
+      </div>
+    </div>
   );
 }
