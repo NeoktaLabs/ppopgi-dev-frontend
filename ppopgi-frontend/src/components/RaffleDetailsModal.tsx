@@ -74,7 +74,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [allowLoading, setAllowLoading] = useState(false);
 
-  // ✅ Copy link feedback (tiny inline message; no other UI changes)
+  // --- Copy/share feedback
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
 
   const canShowWinner = useMemo(() => data?.status === "COMPLETED", [data?.status]);
@@ -86,6 +86,51 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     if (data.status !== "OPEN") return `This raffle is ${statusLabel(data.status)} right now.`;
     return null;
   }, [data]);
+
+  // ✅ always build a clean share/copy URL: ONLY ?raffle=0x...
+  const shareUrl = useMemo(() => {
+    if (!raffleId) return null;
+    const u = new URL(window.location.href);
+    u.search = `?raffle=${raffleId}`;
+    return u.toString();
+  }, [raffleId]);
+
+  const shareText = useMemo(() => {
+    const name = data?.name ? `Join this raffle: ${data.name}` : "Join this raffle";
+    return `${name}`;
+  }, [data?.name]);
+
+  const shareLinks = useMemo(() => {
+    if (!shareUrl) return null;
+    const url = encodeURIComponent(shareUrl);
+    const text = encodeURIComponent(shareText);
+
+    return {
+      x: `https://twitter.com/intent/tweet?url=${url}&text=${text}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}`,
+      telegram: `https://t.me/share/url?url=${url}&text=${text}`,
+      whatsapp: `https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`,
+    };
+  }, [shareUrl, shareText]);
+
+  async function onCopyLink() {
+    if (!shareUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopyMsg("Link copied.");
+      window.setTimeout(() => setCopyMsg(null), 1200);
+    } catch {
+      window.prompt("Copy this link:", shareUrl);
+      setCopyMsg("Copy the link.");
+      window.setTimeout(() => setCopyMsg(null), 1200);
+    }
+  }
+
+  function openShare(url: string) {
+    // keep it simple + reliable
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 
   // Contracts (thirdweb)
   const raffleContract = useMemo(() => {
@@ -107,25 +152,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
       address: addr,
     });
   }, [data?.usdcToken]);
-
-  // ✅ Copy link (always ONLY ?raffle=0x... — no title/text in URL)
-  async function onCopyLink() {
-    if (!raffleId) return;
-
-    const u = new URL(window.location.href);
-    u.search = `?raffle=${raffleId}`;
-    const url = u.toString();
-
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopyMsg("Link copied.");
-      window.setTimeout(() => setCopyMsg(null), 1200);
-    } catch {
-      window.prompt("Copy this link:", url);
-      setCopyMsg("Copy the link.");
-      window.setTimeout(() => setCopyMsg(null), 1200);
-    }
-  }
 
   // Reset ticket input + messages when opening a new raffle
   useEffect(() => {
@@ -362,6 +388,20 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     opacity: 1,
   };
 
+  const miniBtn: React.CSSProperties = {
+    border: "1px solid rgba(255,255,255,0.5)",
+    background: "rgba(255,255,255,0.25)",
+    borderRadius: 12,
+    padding: "8px 10px",
+    cursor: "pointer",
+  };
+
+  const miniBtnDisabled: React.CSSProperties = {
+    ...miniBtn,
+    cursor: "not-allowed",
+    opacity: 0.55,
+  };
+
   return (
     <div style={overlay} onMouseDown={onClose}>
       <div style={card} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -373,71 +413,77 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>{raffleId}</div>
             ) : null}
 
-            {/* ✅ Copy link feedback */}
             {copyMsg && (
-              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-                {copyMsg}
-              </div>
+              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>{copyMsg}</div>
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 8 }}>
-            {/* ✅ Copy link button (only addition) */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {/* ✅ Social share buttons are back */}
             <button
               onClick={onCopyLink}
-              disabled={!raffleId}
-              style={{
-                border: "1px solid rgba(255,255,255,0.5)",
-                background: "rgba(255,255,255,0.25)",
-                borderRadius: 12,
-                padding: "8px 10px",
-                cursor: raffleId ? "pointer" : "not-allowed",
-                opacity: raffleId ? 1 : 0.55,
-              }}
+              disabled={!shareUrl}
+              style={shareUrl ? miniBtn : miniBtnDisabled}
+              title="Copy link"
             >
               Copy link
             </button>
 
             <button
+              onClick={() => shareLinks && openShare(shareLinks.x)}
+              disabled={!shareLinks}
+              style={shareLinks ? miniBtn : miniBtnDisabled}
+              title="Share on X"
+            >
+              X
+            </button>
+
+            <button
+              onClick={() => shareLinks && openShare(shareLinks.facebook)}
+              disabled={!shareLinks}
+              style={shareLinks ? miniBtn : miniBtnDisabled}
+              title="Share on Facebook"
+            >
+              Facebook
+            </button>
+
+            <button
+              onClick={() => shareLinks && openShare(shareLinks.telegram)}
+              disabled={!shareLinks}
+              style={shareLinks ? miniBtn : miniBtnDisabled}
+              title="Share on Telegram"
+            >
+              Telegram
+            </button>
+
+            <button
+              onClick={() => shareLinks && openShare(shareLinks.whatsapp)}
+              disabled={!shareLinks}
+              style={shareLinks ? miniBtn : miniBtnDisabled}
+              title="Share on WhatsApp"
+            >
+              WhatsApp
+            </button>
+
+            <button
               onClick={() => data && setSafetyOpen(true)}
               disabled={!data}
-              style={{
-                border: "1px solid rgba(255,255,255,0.5)",
-                background: "rgba(255,255,255,0.25)",
-                borderRadius: 12,
-                padding: "8px 10px",
-                cursor: data ? "pointer" : "not-allowed",
-                opacity: data ? 1 : 0.55,
-              }}
+              style={data ? miniBtn : miniBtnDisabled}
+              title="Safety info"
             >
               Safety info
             </button>
 
-            <button
-              onClick={onClose}
-              style={{
-                border: "1px solid rgba(255,255,255,0.5)",
-                background: "rgba(255,255,255,0.25)",
-                borderRadius: 12,
-                padding: "8px 10px",
-                cursor: "pointer",
-              }}
-            >
+            <button onClick={onClose} style={miniBtn} title="Close">
               Close
             </button>
           </div>
         </div>
 
         {loading && (
-          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-            Loading live details…
-          </div>
+          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>Loading live details…</div>
         )}
-        {note && (
-          <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-            {note}
-          </div>
-        )}
+        {note && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{note}</div>}
 
         {data && (
           <>
@@ -522,9 +568,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                   )}
                 </div>
               ) : (
-                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-                  Please sign in to join.
-                </div>
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>Please sign in to join.</div>
               )}
 
               <button style={needsAllow ? btnEnabled : btnDisabled} disabled={!needsAllow} onClick={onAllow}>
@@ -541,7 +585,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                 </div>
               )}
 
-              {/* Nice hint if winner is already set */}
               {canShowWinner && data.winner && !isZeroAddr(data.winner) && (
                 <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
                   This raffle is settled — joining is no longer possible.
@@ -552,11 +595,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                 Nothing happens automatically. You always confirm actions yourself.
               </div>
 
-              {buyMsg && (
-                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-                  {buyMsg}
-                </div>
-              )}
+              {buyMsg && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{buyMsg}</div>}
             </div>
 
             {/* Winner */}
