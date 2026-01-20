@@ -90,10 +90,9 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   // ---- parse + validate ----
   const durV = toIntStrict(durationValue, 0);
-
   const durationSecondsN = durV * unitToSeconds(durationUnit);
 
-  // Duration min/max: 10 minutes to 30 days
+  // Duration min/max: 5 minutes to 30 days
   const MIN_DURATION_SECONDS = 5 * 60; // 5 min
   const MAX_DURATION_SECONDS = 30 * 24 * 3600; // 30 days
 
@@ -101,7 +100,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   // Advanced numbers (integers only)
   const minTn = toIntStrict(minTickets, 1);
-  const maxTnRaw = toIntStrict(maxTickets, 0); // if empty => fallback to 0 via sanitizeIntInput
+  const maxTnRaw = toIntStrict(maxTickets, 0);
   const maxTn = maxTickets.trim() === "" ? 0 : maxTnRaw; // 0 means unlimited
   const minPurchase = toIntStrict(minPurchaseAmount, 1);
 
@@ -109,7 +108,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const maxT = BigInt(Math.max(0, maxTn));
   const minPurchaseU32 = Math.max(1, minPurchase);
 
-  const maxTicketsIsUnlimited = maxTn === 0;
+  const maxTicketsIsUnlimited = maxTickets.trim() === "" || maxTn === 0;
 
   const ticketsOk = (() => {
     if (maxTicketsIsUnlimited) return true;
@@ -132,7 +131,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   const durationHint = useMemo(() => {
     if (!durV) return "Choose a duration.";
-    if (durationSecondsN < MIN_DURATION_SECONDS) return "Minimum duration is 10 minutes.";
+    if (durationSecondsN < MIN_DURATION_SECONDS) return "Minimum duration is 5 minutes.";
     if (durationSecondsN > MAX_DURATION_SECONDS) return "Maximum duration is 30 days.";
     const end = new Date(Date.now() + durationSecondsN * 1000);
     return `Ends at: ${end.toLocaleString()}`;
@@ -141,13 +140,16 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   async function onCreate() {
     setMsg(null);
 
+    // quick visibility
+    console.log("CREATE_RAFFLE_CLICK");
+
     if (!account?.address) {
       setMsg("Please sign in first.");
       return;
     }
 
     if (!durOk) {
-      setMsg("Duration must be between 10 minutes and 30 days.");
+      setMsg("Duration must be between 5 minutes and 30 days.");
       return;
     }
 
@@ -161,10 +163,40 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
       return;
     }
 
-    try {
-      const ticketPriceU = parseUnits(ticketPrice || "0", 6);
-      const winningPotU = parseUnits(winningPot || "0", 6);
+    // Log computed params so failures are diagnosable
+    console.log("CREATE_RAFFLE_PARAMS:", {
+      name: name.trim(),
+      ticketPrice,
+      winningPot,
+      minT: minT.toString(),
+      maxT: maxT.toString(),
+      durationSecondsN,
+      minPurchaseU32,
+      deployer: ADDRESSES.SingleWinnerDeployer,
+    });
 
+    // parseUnits can throw: isolate it with a friendly message
+    let ticketPriceU: bigint;
+    let winningPotU: bigint;
+
+    try {
+      ticketPriceU = parseUnits(ticketPrice || "0", 6);
+      winningPotU = parseUnits(winningPot || "0", 6);
+    } catch (e: any) {
+      console.error("PARSE_UNITS_ERROR_RAW:", e);
+      const msg =
+        e?.reason ||
+        e?.shortMessage ||
+        e?.message ||
+        e?.data?.message ||
+        e?.error?.message ||
+        e?.cause?.message ||
+        String(e);
+      setMsg(msg || "Invalid USDC amount. Use digits and an optional dot (example: 1.5).");
+      return;
+    }
+
+    try {
       const durationSeconds = BigInt(durationSecondsN);
 
       const tx = prepareContractCall({
@@ -182,6 +214,8 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
         ],
       });
 
+      console.log("CREATE_RAFFLE_TX_PREPARED:", tx);
+
       await sendAndConfirm(tx);
 
       setMsg("Raffle created successfully.");
@@ -190,11 +224,23 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
       } catch {}
       onClose();
     } catch (e: any) {
-      const m = String(e?.message || "");
-      if (m.toLowerCase().includes("user rejected") || m.toLowerCase().includes("rejected")) {
+      // Print EVERYTHING, no assumptions about error shape
+      console.error("CREATE_RAFFLE_ERROR_RAW:", e);
+      console.error("CREATE_RAFFLE_ERROR_KEYS:", e ? Object.keys(e) : null);
+
+      const m =
+        e?.reason ||
+        e?.shortMessage ||
+        e?.message ||
+        e?.data?.message ||
+        e?.error?.message ||
+        e?.cause?.message ||
+        String(e);
+
+      if (String(m).toLowerCase().includes("rejected") || String(m).toLowerCase().includes("user rejected")) {
         setMsg("Transaction canceled.");
       } else {
-        setMsg("Could not create the raffle. Please try again.");
+        setMsg(m || "Could not create the raffle (no error message).");
       }
     }
   }
@@ -398,7 +444,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
           </div>
 
           <div>
-            {labelRow("Duration", "How long the raffle stays open. Min 10 minutes, max 30 days.")}
+            {labelRow("Duration", "How long the raffle stays open. Min 5 minutes, max 30 days.")}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
               <input
                 style={input}
