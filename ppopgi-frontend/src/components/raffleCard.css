@@ -14,7 +14,6 @@
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
 
-  /* ticket wash */
   overflow: hidden;
 }
 
@@ -30,7 +29,6 @@
 }
 
 .pp-ticket::after {
-  /* subtle sparkle grain */
   content: "";
   position: absolute;
   inset: 0;
@@ -111,6 +109,14 @@
   color: #2B2B33;
 }
 
+/* hint line */
+.pp-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.86;
+  color: #2B2B33;
+}
+
 /* dashed tear line */
 .pp-tear {
   margin-top: 12px;
@@ -164,6 +170,7 @@
   font-size: 12px;
   font-weight: 850;
   color: #2B2B33;
+  white-space: nowrap;
 }
 
 .pp-pillBtn:hover {
@@ -182,7 +189,7 @@
   white-space: nowrap;
 }
 
-/* tone accents (very subtle) */
+/* tone accents */
 .pp-ticket--open .pp-stamp { background: rgba(169, 212, 255, 0.45); }
 .pp-ticket--drawing .pp-stamp { background: rgba(255, 216, 154, 0.55); }
 .pp-ticket--settled .pp-stamp { background: rgba(203, 183, 246, 0.55); }
