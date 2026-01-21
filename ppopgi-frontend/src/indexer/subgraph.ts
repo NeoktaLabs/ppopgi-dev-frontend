@@ -30,7 +30,9 @@ export type RaffleListItem = {
   // outcome / lifecycle
   winner?: string | null;
   winningTicketIndex?: string | null;
-  completedAt?: string | null;
+
+  finalizedAt?: string | null;   // ✅ ADD THIS (BigInt timestamp)
+  completedAt?: string | null;   // already exists in schema
 
   canceledReason?: string | null;
   canceledAt?: string | null;
@@ -77,6 +79,8 @@ export async function fetchRafflesFromSubgraph(
 
         winner
         winningTicketIndex
+
+        finalizedAt       # ✅ ADD
         completedAt
 
         canceledReason
