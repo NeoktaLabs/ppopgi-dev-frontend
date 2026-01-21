@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { formatUnits } from "ethers";
+import "./RaffleCard.css";
 
 type Props = {
   raffle: RaffleListItem;
@@ -52,41 +53,21 @@ type DisplayStatus = "Open" | "Finalizing" | "Drawing" | "Settled" | "Canceled" 
 function statusTheme(s: DisplayStatus) {
   if (s === "Open")
     return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
-
-  // ✅ Finalizing now BLUE + blinking
   if (s === "Finalizing")
-    return {
-      bg: "rgba(120, 170, 255, 0.92)",
-      fg: "#0E2A66",
-      border: "1px solid rgba(0,0,0,0.10)",
-      pulse: true,
-      pulseKind: "blue" as const,
-    };
-
-  // Drawing can also use the same blue family (bottom line will blink too)
-  if (s === "Drawing")
-    return {
-      bg: "rgba(203, 183, 246, 0.92)",
-      fg: "#2E1C5C",
-      border: "1px solid rgba(0,0,0,0.08)",
-      pulse: true,
-      pulseKind: "blue" as const,
-    };
-
-  if (s === "Settled")
-    return { bg: "rgba(255, 216, 154, 0.92)", fg: "#4A2A00", border: "1px solid rgba(0,0,0,0.08)" };
-
-  // ✅ Canceled pill in RED
-  if (s === "Canceled")
     return {
       bg: "rgba(255, 120, 140, 0.92)",
       fg: "#5A0012",
       border: "1px solid rgba(0,0,0,0.10)",
+      pulse: true,
     };
-
+  if (s === "Drawing")
+    return { bg: "rgba(203, 183, 246, 0.92)", fg: "#2E1C5C", border: "1px solid rgba(0,0,0,0.08)" };
+  if (s === "Settled")
+    return { bg: "rgba(255, 216, 154, 0.92)", fg: "#4A2A00", border: "1px solid rgba(0,0,0,0.08)" };
+  if (s === "Canceled")
+    return { bg: "rgba(230, 234, 242, 0.92)", fg: "#2B2B33", border: "1px solid rgba(0,0,0,0.08)" };
   if (s === "Getting ready")
     return { bg: "rgba(169, 212, 255, 0.92)", fg: "#133A66", border: "1px solid rgba(0,0,0,0.08)" };
-
   return { bg: "rgba(255,255,255,0.72)", fg: "#5C2A3E", border: "1px solid rgba(0,0,0,0.08)" };
 }
 
@@ -142,44 +123,10 @@ function formatWhen(tsSeconds: string | null | undefined) {
   const n = Number(tsSeconds || "0");
   if (!Number.isFinite(n) || n <= 0) return "Unknown time";
   try {
-    return new Date(n * 1000).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return new Date(n * 1000).toLocaleString();
   } catch {
     return "Unknown time";
   }
-}
-
-function shortTime(tsSeconds: string | null | undefined) {
-  const n = Number(tsSeconds || "0");
-  if (!Number.isFinite(n) || n <= 0) return null;
-  try {
-    return new Date(n * 1000).toLocaleString(undefined, {
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return null;
-  }
-}
-
-// ✅ requested wording
-function canceledCopy(reason?: string | null) {
-  const r = (reason || "").trim().toLowerCase();
-
-  if (r.includes("min") || r.includes("minimum") || r.includes("not reached") || r.includes("not enough")) {
-    return "Min tickets sold not reached";
-  }
-
-  if (!r) return "Canceled";
-  if (r.length > 44) return (reason || "").slice(0, 42) + "…";
-  return reason || "Canceled";
 }
 
 export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
@@ -200,35 +147,17 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     return u.toString();
   }, [raffle.id]);
 
-  async function onShare(e: React.MouseEvent) {
+  async function onShareCopy(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-
-    // 1) native share sheet if available
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: raffle.name || "Ppopgi raffle",
-          text: "Join this raffle",
-          url: shareUrl,
-        });
-        setCopyMsg("Shared!");
-        window.setTimeout(() => setCopyMsg(null), 900);
-        return;
-      }
-    } catch {
-      // canceled / not supported -> fall back to copy
-    }
-
-    // 2) copy link fallback
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setCopyMsg("Link copied — share it with your friends!");
+      setCopyMsg("Link copied");
     } catch {
       window.prompt("Copy this link:", shareUrl);
-      setCopyMsg("Copy the link — share it with your friends!");
+      setCopyMsg("Copy the link");
     }
-    window.setTimeout(() => setCopyMsg(null), 1500);
+    window.setTimeout(() => setCopyMsg(null), 1200);
   }
 
   // one user-facing status
@@ -252,16 +181,10 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     if (displayStatus === "Open" || displayStatus === "Getting ready") return formatEndsIn(raffle.deadline, nowMs);
     if (displayStatus === "Finalizing") return "Draw in progress";
     if (displayStatus === "Drawing") return "Draw in progress";
-    if (displayStatus === "Settled") {
-      const t = shortTime(raffle.completedAt);
-      return t ? `Settled • ${t}` : "Settled";
-    }
-    if (displayStatus === "Canceled") {
-      const t = shortTime(raffle.canceledAt);
-      return t ? `Canceled • ${t}` : "Canceled";
-    }
+    if (displayStatus === "Settled") return "Settled";
+    if (displayStatus === "Canceled") return "Canceled";
     return "Unknown";
-  }, [displayStatus, raffle.deadline, nowMs, raffle.completedAt, raffle.canceledAt]);
+  }, [displayStatus, raffle.deadline, nowMs]);
 
   // numbers
   const anyRaffle = raffle as any;
@@ -300,8 +223,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   }, [displayStatus, raffle.completedAt, raffle.canceledAt]);
 
   const pastSubline = useMemo(() => {
-    if (displayStatus === "Settled") return raffle.winner ? "Someone won!" : "Settled";
-    if (displayStatus === "Canceled") return canceledCopy(raffle.canceledReason);
+    if (displayStatus === "Settled") {
+      return raffle.winner ? "Someone won!" : "Settled";
+    }
+    if (displayStatus === "Canceled") {
+      const reason = raffle.canceledReason?.trim();
+      return reason ? reason : "Canceled";
+    }
     if (displayStatus === "Drawing" || displayStatus === "Finalizing") return "Waiting for the result";
     return null;
   }, [displayStatus, raffle.winner, raffle.canceledReason]);
@@ -377,7 +305,6 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     color: status.fg,
     border: status.border,
     boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
-    animation: status.pulse ? "ppPulseBlue 950ms ease-in-out infinite" : undefined,
   };
 
   const shareBtn: React.CSSProperties = {
@@ -391,30 +318,24 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     cursor: "pointer",
   };
 
-  // ✅ move toast lower + make sure it is ABOVE everything (zIndex)
   const copyToast: React.CSSProperties = {
     position: "absolute",
-    top: 74, // below the topRow; no longer collides with “Ppopgi”
+    top: 54,
     left: 12,
     right: 12,
     padding: "8px 10px",
     borderRadius: 14,
-    background: "rgba(255,255,255,0.92)",
+    background: "rgba(255,255,255,0.90)",
     border: "1px solid rgba(0,0,0,0.08)",
     color: inkStrong,
     fontSize: 12,
     fontWeight: 950,
-    lineHeight: 1.25,
     textAlign: "center",
     boxShadow: "0 14px 26px rgba(0,0,0,0.12)",
     pointerEvents: "none",
-    zIndex: 50,
   };
 
-  const titleWrap: React.CSSProperties = {
-    marginTop: 10,
-    textAlign: "center",
-  };
+  const titleWrap: React.CSSProperties = { marginTop: 10, textAlign: "center" };
 
   const smallKicker: React.CSSProperties = {
     fontSize: 12,
@@ -491,16 +412,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     color: ink,
   };
 
-  // Progress / Past blocks should take the same “slot”
-  const blockSlot: React.CSSProperties = {
-    marginTop: 12,
-    minHeight: 86,
-  };
+  const blockSlot: React.CSSProperties = { marginTop: 12, minHeight: 86 };
 
-  const barWrap: React.CSSProperties = {
-    display: "grid",
-    gap: 8,
-  };
+  const barWrap: React.CSSProperties = { display: "grid", gap: 8 };
 
   const barLabelRow: React.CSSProperties = {
     display: "flex",
@@ -517,11 +431,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     boxShadow: "inset 0 1px 2px rgba(0,0,0,0.10)",
   };
 
-  const barFillBase: React.CSSProperties = {
-    height: "100%",
-    borderRadius: 999,
-    transition: "width 220ms ease",
-  };
+  const barFillBase: React.CSSProperties = { height: "100%", borderRadius: 999, transition: "width 220ms ease" };
 
   const barFillPending: React.CSSProperties = {
     ...barFillBase,
@@ -562,20 +472,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     gap: 6,
   };
 
-  const pastLine1: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 950,
-    color: inkStrong,
-    lineHeight: 1.25,
-  };
-
-  const pastLine2: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 900,
-    color: ink,
-    opacity: 0.92,
-    lineHeight: 1.25,
-  };
+  const pastLine1: React.CSSProperties = { fontSize: 12, fontWeight: 950, color: inkStrong, lineHeight: 1.25 };
+  const pastLine2: React.CSSProperties = { fontSize: 12, fontWeight: 900, color: ink, opacity: 0.92, lineHeight: 1.25 };
 
   const bottomRow: React.CSSProperties = {
     marginTop: 14,
@@ -586,31 +484,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     gap: 10,
   };
 
-  // ✅ bottom “Draw in progress” should blink BLUE (same vibe as Finalizing)
-  const bottomText: React.CSSProperties = {
-    fontSize: 14,
-    fontWeight: 950,
-    letterSpacing: 0.2,
-    color: displayStatus === "Finalizing" || displayStatus === "Drawing" ? "#0E2A66" : inkStrong,
-    animation: displayStatus === "Finalizing" || displayStatus === "Drawing" ? "ppBlinkBlue 950ms ease-in-out infinite" : undefined,
-  };
-
-  // ✅ replace weird arrow with a “sparkle” affordance (still subtle)
-  const affordance: React.CSSProperties = {
-    position: "absolute",
-    right: 12,
-    bottom: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 12,
-    background: "rgba(255,255,255,0.58)",
-    border: "1px solid rgba(0,0,0,0.06)",
-    display: "grid",
-    placeItems: "center",
-    boxShadow: "0 10px 18px rgba(0,0,0,0.08)",
-    pointerEvents: "none",
-    opacity: 0.9,
-  };
+  const bottomText: React.CSSProperties = { fontSize: 14, fontWeight: 950, color: inkStrong, letterSpacing: 0.2 };
 
   return (
     <div
@@ -625,38 +499,22 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       onMouseLeave={() => setIsHover(false)}
       title="Open raffle"
     >
-      <style>
-        {`
-          @keyframes ppPulseBlue {
-            0%   { transform: scale(1);   filter: saturate(1); }
-            50%  { transform: scale(1.045); filter: saturate(1.25); }
-            100% { transform: scale(1);   filter: saturate(1); }
-          }
-          @keyframes ppBlinkBlue {
-            0% { opacity: 1; }
-            50% { opacity: 0.55; }
-            100% { opacity: 1; }
-          }
-        `}
-      </style>
-
       {/* Ticket notches */}
       <div style={{ ...notch, left: -9 }} />
       <div style={{ ...notch, right: -9 }} />
 
       <div style={topRow}>
-        <div style={statusChip}>{displayStatus.toUpperCase()}</div>
+        {/* ✅ pulse class moved to CSS */}
+        <div style={statusChip} className={status.pulse ? "pp-rc-pulse" : undefined}>
+          {displayStatus.toUpperCase()}
+        </div>
 
-        <button style={shareBtn} onClick={onShare} title="Share" aria-label="Share">
-          {/* share icon (3 nodes) */}
+        <button style={shareBtn} onClick={onShareCopy} title="Copy link" aria-label="Copy link">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M14 3h7v7" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M21 3l-9 9" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             <path
-              d="M16 8a3 3 0 1 0-2.83-4H13a3 3 0 0 0 3 4Zm0 14a3 3 0 1 0-2.83-4H13a3 3 0 0 0 3 4ZM6 15a3 3 0 1 0-2.83-4H3a3 3 0 0 0 3 4Z"
-              fill={inkStrong}
-              opacity="0.9"
-            />
-            <path
-              d="M8.6 13.1l6.8 3.8M15.4 7.1L8.6 10.9"
+              d="M10 7H7a4 4 0 0 0-4 4v6a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4v-3"
               stroke={inkStrong}
               strokeWidth="2"
               strokeLinecap="round"
@@ -671,7 +529,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
 
       <div style={titleWrap}>
         <div style={smallKicker}>Ppopgi</div>
-        <div style={titleText} title={raffle.name}>
+
+        {/* ✅ 2-line clamp + keep full title on hover */}
+        <div style={titleText} className="pp-rc-titleClamp" title={raffle.name}>
           {raffle.name}
         </div>
       </div>
@@ -694,14 +554,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         </div>
       </div>
 
-      {/* Progress for active only, summary block for past — same slot height */}
       <div style={blockSlot}>
         {showProgress && hasMin ? (
           <div style={barWrap}>
             {!minReached ? (
               <>
                 <div style={barLabelRow}>
-                  <span style={miniLabel}>Minimum target</span>
+                  <span style={miniLabel}>Minimum needed</span>
                   <span style={smallHint}>
                     {soldN} / {minN}
                   </span>
@@ -710,7 +569,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
                   <div style={{ ...barFillPending, width: `${Math.round(minProgress * 100)}%` }} />
                 </div>
                 <div style={{ fontSize: 11, opacity: 0.88, color: ink }}>
-                  When this is reached, the raffle becomes eligible for the draw step.
+                  This minimum must be reached before the draw step can happen.
                 </div>
               </>
             ) : (
@@ -752,22 +611,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
 
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" stroke={inkStrong} strokeWidth="2" opacity="0.8" />
-          <path d="M12 7v6l4 2" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
-        </svg>
-      </div>
-
-      {/* click affordance */}
-      <div style={affordance} aria-hidden="true" title="Open raffle">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <path
-            d="M12 2l1.2 4.6L18 8l-4.8 1.4L12 14l-1.2-4.6L6 8l4.8-1.4L12 2Z"
-            fill={inkStrong}
-            opacity="0.7"
-          />
-          <path
-            d="M19 13l.7 2.6L22 16l-2.3.7L19 19l-.7-2.3L16 16l2.3-.4L19 13Z"
-            fill={inkStrong}
-            opacity="0.55"
+            d="M12 7v6l4 2"
+            stroke={inkStrong}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.85"
           />
         </svg>
       </div>
