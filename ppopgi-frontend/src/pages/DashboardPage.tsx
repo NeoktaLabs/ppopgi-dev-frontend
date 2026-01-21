@@ -30,6 +30,9 @@ function fmtNative(raw: string) {
   }
 }
 
+// ✅ Type-safe method string for thirdweb
+type MethodSig = `function ${string}`;
+
 export function DashboardPage({ account, onOpenRaffle }: Props) {
   const { items, note, refetch } = useClaimableRaffles(account, 250);
 
@@ -84,7 +87,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
     cursor: "not-allowed",
   };
 
-  async function callRaffleTx(raffleId: string, method: string) {
+  async function callRaffleTx(raffleId: string, method: MethodSig) {
     setMsg(null);
 
     if (!account) {
@@ -122,10 +125,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
     const hasNative = BigInt(it.claimableNative || "0") > 0n;
 
     // Transparent message
-    const statusLine =
-      hasUsdc || hasNative
-        ? "You have funds available to claim."
-        : "Nothing to claim right now.";
+    const statusLine = hasUsdc || hasNative ? "You have funds available to claim." : "Nothing to claim right now.";
 
     return (
       <div key={raffle.id}>
@@ -149,9 +149,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
             {it.isCreator && <span style={pill}>You are creator</span>}
           </div>
 
-          <div style={{ fontSize: 13, opacity: 0.9 }}>
-            {statusLine}
-          </div>
+          <div style={{ fontSize: 13, opacity: 0.9 }}>{statusLine}</div>
 
           <div style={{ fontSize: 13, opacity: 0.9 }}>
             Claimable USDC: <b>{fmtUsdc(it.claimableUsdc)} USDC</b> • Claimable native:{" "}
@@ -206,9 +204,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
         <h2 style={{ margin: 0 }}>Dashboard</h2>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>
-            {account ? "Your activity" : "Sign in required"}
-          </div>
+          <div style={{ fontSize: 12, opacity: 0.8 }}>{account ? "Your activity" : "Sign in required"}</div>
 
           <button style={pill} onClick={refetch} disabled={isPending}>
             Refresh
@@ -223,9 +219,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
         <div style={{ fontWeight: 800 }}>Your created raffles</div>
         <div style={grid}>
           {!created && <div style={{ opacity: 0.85, fontSize: 13 }}>Loading…</div>}
-          {created && created.length === 0 && (
-            <div style={{ opacity: 0.85, fontSize: 13 }}>No created raffles yet.</div>
-          )}
+          {created && created.length === 0 && <div style={{ opacity: 0.85, fontSize: 13 }}>No created raffles yet.</div>}
           {created?.map(renderItem)}
         </div>
       </div>
