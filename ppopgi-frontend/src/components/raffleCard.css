@@ -1,0 +1,223 @@
+/* src/components/raffleCard.css */
+
+.pp-ticket {
+  position: relative;
+  border-radius: 18px;
+  padding: 14px;
+  cursor: pointer;
+  user-select: none;
+
+  /* glass */
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+
+  /* ticket wash */
+  overflow: hidden;
+}
+
+.pp-ticket::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(520px 240px at 15% 20%, rgba(246, 182, 200, 0.30), transparent 60%),
+    radial-gradient(540px 260px at 85% 10%, rgba(169, 212, 255, 0.28), transparent 60%),
+    radial-gradient(540px 260px at 75% 90%, rgba(203, 183, 246, 0.22), transparent 65%);
+  pointer-events: none;
+}
+
+.pp-ticket::after {
+  /* subtle sparkle grain */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.10), transparent 40%, rgba(255,255,255,0.06));
+  pointer-events: none;
+}
+
+.pp-ticket > * {
+  position: relative;
+  z-index: 1;
+}
+
+.pp-ticket:focus-visible {
+  outline: 3px solid rgba(255, 216, 154, 0.75);
+  outline-offset: 3px;
+}
+
+/* top row */
+.pp-ticket__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pp-ticket__titleWrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pp-ticket__title {
+  font-weight: 950;
+  font-size: 15px;
+  letter-spacing: 0.2px;
+  color: #2B2B33;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 56vw;
+}
+
+/* facts grid */
+.pp-ticket__facts {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 900px) {
+  .pp-ticket__facts {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+  .pp-ticket__title {
+    max-width: 520px;
+  }
+}
+
+.pp-fact {
+  border-radius: 14px;
+  padding: 10px 10px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.pp-fact__label {
+  font-size: 12px;
+  opacity: 0.85;
+  color: #2B2B33;
+}
+
+.pp-fact__value {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #2B2B33;
+}
+
+/* dashed tear line */
+.pp-tear {
+  margin-top: 12px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.65);
+  opacity: 0.9;
+}
+
+/* footer */
+.pp-ticket__footer {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.pp-footerLine {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.pp-muted {
+  font-size: 12px;
+  opacity: 0.85;
+  color: #2B2B33;
+}
+
+.pp-strong {
+  font-weight: 950;
+  color: #2B2B33;
+}
+
+.pp-footerHint {
+  font-size: 12px;
+  opacity: 0.75;
+  color: #2B2B33;
+}
+
+.pp-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 800;
+}
+
+/* pill buttons */
+.pp-pillBtn {
+  border: 1px solid rgba(0,0,0,0.12);
+  background: rgba(255,255,255,0.70);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+  color: #2B2B33;
+}
+
+.pp-pillBtn:hover {
+  border-color: rgba(0,0,0,0.22);
+}
+
+/* status stamp */
+.pp-stamp {
+  font-size: 11px;
+  font-weight: 950;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.10);
+  background: rgba(255,255,255,0.62);
+  color: #2B2B33;
+  white-space: nowrap;
+}
+
+/* tone accents (very subtle) */
+.pp-ticket--open .pp-stamp { background: rgba(169, 212, 255, 0.45); }
+.pp-ticket--drawing .pp-stamp { background: rgba(255, 216, 154, 0.55); }
+.pp-ticket--settled .pp-stamp { background: rgba(203, 183, 246, 0.55); }
+.pp-ticket--canceled .pp-stamp { background: rgba(246, 182, 200, 0.55); }
+.pp-ticket--funding .pp-stamp { background: rgba(250, 209, 184, 0.55); }
+
+/* share panel */
+.pp-sharePanel {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  background: rgba(255, 255, 255, 0.20);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: grid;
+  gap: 10px;
+}
+
+.pp-shareHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.pp-shareRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.pp-shareMsg {
+  font-size: 12px;
+  opacity: 0.85;
+  color: #2B2B33;
+}
