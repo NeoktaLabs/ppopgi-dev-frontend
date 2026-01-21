@@ -41,6 +41,15 @@ function formatEndsIn(deadlineSeconds: string, nowMs: number) {
   return `Ends in ${d}${hours}h ${minutes}m ${pad2(seconds)}s`;
 }
 
+function statusLabel(s: string) {
+  if (s === "FUNDING_PENDING") return "Getting ready";
+  if (s === "OPEN") return "Open";
+  if (s === "DRAWING") return "Drawing";
+  if (s === "COMPLETED") return "Settled";
+  if (s === "CANCELED") return "Canceled";
+  return "Unknown";
+}
+
 export function RaffleCard({ raffle, onOpen }: Props) {
   const [shareOpen, setShareOpen] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
@@ -144,6 +153,33 @@ export function RaffleCard({ raffle, onOpen }: Props) {
 
   const subtle: React.CSSProperties = { fontSize: 12, opacity: 0.8 };
 
+  // ---- transparency helpers ----
+  const deadlineMs = useMemo(() => {
+    const n = Number(raffle.deadline);
+    return Number.isFinite(n) ? n * 1000 : 0;
+  }, [raffle.deadline]);
+
+  const deadlinePassed = deadlineMs > 0 ? nowMs >= deadlineMs : false;
+
+  // If deadline passed but indexer still says OPEN => show Finalizing instead of confusing "Open/Ended"
+  const displayStatus = useMemo(() => {
+    if (raffle.status === "OPEN" && deadlinePassed) return "Finalizing…";
+    return statusLabel(raffle.status);
+  }, [raffle.status, deadlinePassed]);
+
+  const statusHint = useMemo(() => {
+    if (!deadlinePassed) return null;
+
+    // Deadline passed: explain what users should expect
+    if (raffle.status === "OPEN") {
+      return "Deadline passed — finalization is pending on-chain.";
+    }
+    if (raffle.status === "DRAWING") {
+      return "Winner selection is in progress on-chain.";
+    }
+    return null;
+  }, [deadlinePassed, raffle.status]);
+
   return (
     <div
       key={raffle.id}
@@ -187,6 +223,18 @@ export function RaffleCard({ raffle, onOpen }: Props) {
       <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
         {formatEndsIn(raffle.deadline, nowMs)}
       </div>
+
+      {/* ✅ clearer status */}
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
+        Status: <b>{displayStatus}</b>
+      </div>
+
+      {/* ✅ small “why” hint when deadline passed but UI might feel confusing */}
+      {statusHint && (
+        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+          {statusHint}
+        </div>
+      )}
 
       <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
         Ppopgi fee: {raffle.protocolFeePercent}%
