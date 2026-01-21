@@ -186,23 +186,27 @@ export default function App() {
   /* ───────────── render helpers ───────────── */
 
   const podium = useMemo(() => {
+    // Sort by winningPot descending (BigInt safe)
     const sorted = [...bigPrizes].sort((a, b) => {
       try {
-        return Number(BigInt(b.winningPot || "0") - BigInt(a.winningPot || "0"));
+        const A = BigInt(a.winningPot || "0");
+        const B = BigInt(b.winningPot || "0");
+        return A === B ? 0 : A < B ? 1 : -1; // desc
       } catch {
         return 0;
       }
     });
 
     const top3 = sorted.slice(0, 3);
-    const gold = top3[0] || null;
-    const silver = top3[1] || null;
-    const bronze = top3[2] || null;
-
-    return { gold, silver, bronze };
+    return {
+      gold: top3[0] || null,
+      silver: top3[1] || null,
+      bronze: top3[2] || null,
+    };
   }, [bigPrizes]);
 
   const endingSoonSorted = useMemo(() => {
+    // Soonest deadline on the left
     return [...endingSoon].sort((a, b) => Number(a.deadline || "0") - Number(b.deadline || "0"));
   }, [endingSoon]);
 
@@ -251,7 +255,9 @@ export default function App() {
             </div>
           </div>
 
-          {page === "home" && homeNote && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.88 }}>{homeNote}</div>}
+          {page === "home" && homeNote && (
+            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.88 }}>{homeNote}</div>
+          )}
           {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{createdHint}</div>}
 
           {/* HOME */}
@@ -262,9 +268,17 @@ export default function App() {
 
                 {/* Podium: silver left, gold middle raised, bronze right */}
                 <div className="pp-podium">
-                  <div className="pp-podium__silver">{podium.silver ? <RaffleCard raffle={podium.silver} onOpen={openRaffle} /> : null}</div>
-                  <div className="pp-podium__gold">{podium.gold ? <RaffleCard raffle={podium.gold} onOpen={openRaffle} /> : null}</div>
-                  <div className="pp-podium__bronze">{podium.bronze ? <RaffleCard raffle={podium.bronze} onOpen={openRaffle} /> : null}</div>
+                  <div className="pp-podium__silver">
+                    {podium.silver ? <RaffleCard raffle={podium.silver} onOpen={openRaffle} ribbon="silver" /> : null}
+                  </div>
+
+                  <div className="pp-podium__gold">
+                    {podium.gold ? <RaffleCard raffle={podium.gold} onOpen={openRaffle} ribbon="gold" /> : null}
+                  </div>
+
+                  <div className="pp-podium__bronze">
+                    {podium.bronze ? <RaffleCard raffle={podium.bronze} onOpen={openRaffle} ribbon="bronze" /> : null}
+                  </div>
 
                   {bigPrizes.length === 0 && <div style={{ opacity: 0.85 }}>No open raffles right now.</div>}
                 </div>
