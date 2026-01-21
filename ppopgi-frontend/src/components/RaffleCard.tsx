@@ -9,6 +9,12 @@ type Props = {
 
   // Optional: used for Big Prizes podium ribbons
   ribbon?: "gold" | "silver" | "bronze";
+
+  /**
+   * Optional: if you later want "real" quick entry (write tx from the card),
+   * pass a handler here. If omitted, the Enter button simply opens the modal.
+   */
+  onQuickEnter?: (raffleId: string, qty: number) => void;
 };
 
 function fmtUsdc(raw: string) {
@@ -36,7 +42,7 @@ function formatEndsIn(deadlineSeconds: string, nowMs: number) {
 
   const pad2 = (x: number) => String(x).padStart(2, "0");
   const d = days > 0 ? `${days}d ` : "";
-  return `${d}${hours}h ${minutes}m ${pad2(seconds)}s`;
+  return `${d}${pad2(hours)}h ${pad2(minutes)}m ${pad2(seconds)}s`;
 }
 
 function statusLabel(s: string) {
@@ -48,10 +54,16 @@ function statusLabel(s: string) {
   return "Unknown";
 }
 
-export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
+function ribbonText(r: "gold" | "silver" | "bronze") {
+  if (r === "gold") return "GOLD";
+  if (r === "silver") return "SILVER";
+  return "BRONZE";
+}
+
+export function RaffleCard({ raffle, onOpen, ribbon, onQuickEnter }: Props) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
-  const [hover, setHover] = useState(false);
+  const [qty, setQty] = useState<number>(1);
 
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -81,7 +93,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     window.setTimeout(() => setCopyMsg(null), 1100);
   }
 
-  // ── derive display status (show ONE status, not two) ──
+  // ── derive ONE display status ──
   const deadlineMs = useMemo(() => {
     const n = Number(raffle.deadline);
     return Number.isFinite(n) ? n * 1000 : 0;
@@ -90,22 +102,39 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const deadlinePassed = deadlineMs > 0 ? nowMs >= deadlineMs : false;
 
   const displayStatus = useMemo(() => {
+    // If indexer still says OPEN but deadline passed: user-meaningful state
     if (raffle.status === "OPEN" && deadlinePassed) return "Finalizing";
     return statusLabel(raffle.status);
   }, [raffle.status, deadlinePassed]);
 
-  const timeLine = useMemo(() => {
-    if (raffle.status === "COMPLETED" || raffle.status === "CANCELED") return "Ended";
-    if (raffle.status === "DRAWING") return "In progress";
+  const isOpen = displayStatus === "Open";
+
+  const endsLine = useMemo(() => {
+    if (displayStatus === "Settled" || displayStatus === "Canceled") return "Ended";
+    if (displayStatus === "Drawing" || displayStatus === "Finalizing") return "In progress";
     return formatEndsIn(raffle.deadline, nowMs);
-  }, [raffle.status, raffle.deadline, nowMs]);
+  }, [displayStatus, raffle.deadline, nowMs]);
+
+  const soldNum = useMemo(() => {
+    const n = Number(raffle.sold || "0");
+    return Number.isFinite(n) ? n : 0;
+  }, [raffle.sold]);
+
+  const maxNum = useMemo(() => {
+    const n = Number(raffle.maxTickets || "0");
+    return Number.isFinite(n) ? n : 0;
+  }, [raffle.maxTickets]);
 
   const soldLine = useMemo(() => {
-    const sold = raffle.sold ?? "0";
-    const max = raffle.maxTickets ?? "0";
-    const maxPart = max !== "0" ? ` / ${max}` : "";
-    return `${sold}${maxPart}`;
-  }, [raffle.sold, raffle.maxTickets]);
+    if (maxNum > 0) return `${soldNum} / ${maxNum}`;
+    return `${soldNum}`;
+  }, [soldNum, maxNum]);
+
+  const soldPct = useMemo(() => {
+    if (!maxNum) return null;
+    const p = Math.max(0, Math.min(100, Math.round((soldNum / maxNum) * 100)));
+    return p;
+  }, [soldNum, maxNum]);
 
   const minLine = useMemo(() => {
     const anyRaffle = raffle as any;
@@ -114,113 +143,70 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     return String(min);
   }, [raffle]);
 
-  // ── theme-ish colors (more lively than plain black) ──
-  const INK = "#2B2B33";
-  const INK_SOFT = "rgba(43,43,51,0.82)";
-  const LABEL = "rgba(43,43,51,0.72)";
-  const ACCENT = "#B84E7B"; // sakura ink
-  const ACCENT2 = "#6B4BB8"; // lavender ink
+  // Quick entry helpers
+  const canQuickEnter = isOpen;
+  const inc = () => setQty((q) => Math.min(1000, q + 1));
+  const dec = () => setQty((q) => Math.max(1, q - 1));
 
-  // ── styles (ticket-like, pinker, less “see-through”) ──
+  const onPressEnter = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (onQuickEnter) onQuickEnter(raffle.id, qty);
+    else onOpen(raffle.id);
+  };
+
+  // ───────── styles (vertical ticket) ─────────
+
   const card: React.CSSProperties = {
     position: "relative",
     width: "100%",
-    maxWidth: 420,
-    borderRadius: 18,
-    padding: 14,
+    maxWidth: 340, // ✅ vertical ticket width
+    borderRadius: 22,
+    padding: 16,
     cursor: "pointer",
     userSelect: "none",
     overflow: "hidden",
 
-    // ✅ less transparent + more “pink paper”
+    // ✅ stronger pink, less “washed out”
     background:
-      "linear-gradient(135deg," +
-      " rgba(246,182,200,0.78) 0%," +
-      " rgba(203,183,246,0.46) 55%," +
-      " rgba(250,209,184,0.38) 100%)",
+      "linear-gradient(180deg, rgba(255,214,230,0.86), rgba(255,214,230,0.58) 40%, rgba(255,232,243,0.64))",
+    border: "1px solid rgba(255,255,255,0.70)",
+    boxShadow: "0 16px 34px rgba(0,0,0,0.14)",
+    backdropFilter: "blur(14px)",
 
-    // subtle “paper” inner glow
-    boxShadow: hover
-      ? "0 14px 34px rgba(0,0,0,0.18)"
-      : "0 10px 26px rgba(0,0,0,0.14)",
-    border: "1px solid rgba(255,255,255,0.62)",
-    backdropFilter: "blur(8px)", // ✅ slightly less blur so color reads better
-    transform: hover ? "translateY(-4px)" : "translateY(0)",
     transition: "transform 140ms ease, box-shadow 140ms ease",
-
-    color: INK,
   };
 
-  const sheen: React.CSSProperties = {
+  const hoverLift: React.CSSProperties = {
+    transform: "translateY(-4px)",
+    boxShadow: "0 20px 44px rgba(0,0,0,0.18)",
+  };
+
+  // notches
+  const notch: React.CSSProperties = {
     position: "absolute",
-    inset: 0,
+    top: "52%",
+    transform: "translateY(-50%)",
+    width: 18,
+    height: 18,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.55)",
+    border: "1px solid rgba(0,0,0,0.06)",
+    boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.14)",
     pointerEvents: "none",
-    background:
-      "radial-gradient(900px 260px at 20% 10%, rgba(255,255,255,0.35), transparent 60%)," +
-      "radial-gradient(700px 220px at 80% 30%, rgba(255,255,255,0.22), transparent 60%)",
-    opacity: 0.9,
   };
 
   const tearLine: React.CSSProperties = {
-    position: "absolute",
-    left: 14,
-    right: 14,
-    bottom: 54,
+    marginTop: 14,
     height: 1,
     background:
-      "repeating-linear-gradient(90deg, rgba(255,255,255,0.72), rgba(255,255,255,0.72) 6px, rgba(255,255,255,0) 6px, rgba(255,255,255,0) 12px)",
-    opacity: 0.9,
+      "repeating-linear-gradient(90deg, rgba(180,70,120,0.55), rgba(180,70,120,0.55) 7px, rgba(180,70,120,0) 7px, rgba(180,70,120,0) 14px)",
+    opacity: 0.75,
     pointerEvents: "none",
   };
 
-  const notchBase: React.CSSProperties = {
-    position: "absolute",
-    top: "50%",
-    transform: "translateY(-50%)",
-    width: 22,
-    height: 22,
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.16)",
-    border: "1px solid rgba(255,255,255,0.55)",
-    boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.06)",
-    pointerEvents: "none",
-  };
-  const leftNotch: React.CSSProperties = { ...notchBase, left: -11 };
-  const rightNotch: React.CSSProperties = { ...notchBase, right: -11 };
-
-  // ✅ ribbon moved to top-right and never overlaps title
-  const ribbonWrap: React.CSSProperties = {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    pointerEvents: "none",
-    zIndex: 2,
-  };
-
-  const ribbonStyle = (kind: "gold" | "silver" | "bronze"): React.CSSProperties => {
-    const bg =
-      kind === "gold"
-        ? "linear-gradient(135deg, rgba(255,216,154,0.96), rgba(255,216,154,0.62))"
-        : kind === "silver"
-        ? "linear-gradient(135deg, rgba(232,236,245,0.95), rgba(232,236,245,0.62))"
-        : "linear-gradient(135deg, rgba(246,182,200,0.94), rgba(246,182,200,0.62))";
-
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 6,
-      padding: "6px 10px",
-      borderRadius: 999,
-      background: bg,
-      border: "1px solid rgba(255,255,255,0.74)",
-      color: INK,
-      fontWeight: 1000 as any,
-      fontSize: 11,
-      letterSpacing: 0.35,
-      boxShadow: "0 10px 18px rgba(0,0,0,0.12)",
-    };
-  };
-
+  // top row chips
   const topRow: React.CSSProperties = {
     display: "flex",
     justifyContent: "space-between",
@@ -228,223 +214,361 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     gap: 10,
   };
 
-  // ✅ reserve space for chips so title never collides
-  const title: React.CSSProperties = {
-    fontWeight: 1000 as any,
-    fontSize: 16,
-    lineHeight: 1.15,
-    color: INK,
-    textAlign: "left",
-    paddingRight: 130, // room for status + share
-    maxWidth: "100%",
-  };
-
-  const chips: React.CSSProperties = {
+  const rightChips: React.CSSProperties = {
     display: "flex",
-    gap: 8,
     alignItems: "center",
+    gap: 10,
     flexShrink: 0,
-    zIndex: 1,
   };
 
   const statusChip: React.CSSProperties = {
     padding: "6px 10px",
     borderRadius: 999,
     fontSize: 12,
-    fontWeight: 1000 as any,
-    color: INK,
-    background: "rgba(255,255,255,0.78)",
-    border: "1px solid rgba(255,255,255,0.70)",
-    backdropFilter: "blur(10px)",
+    fontWeight: 900,
+    letterSpacing: 0.25,
+    color: isOpen ? "#0B4A24" : "#5C2A3E",
+    background: isOpen ? "rgba(145, 247, 184, 0.92)" : "rgba(255,255,255,0.72)",
+    border: isOpen ? "1px solid rgba(0,0,0,0.06)" : "1px solid rgba(0,0,0,0.08)",
     whiteSpace: "nowrap",
   };
 
-  const shareBtn: React.CSSProperties = {
+  const shareIconBtn: React.CSSProperties = {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    background: "rgba(255,255,255,0.70)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    display: "grid",
+    placeItems: "center",
+    cursor: "pointer",
+  };
+
+  // ribbon moved AWAY from title (no overlap)
+  const ribbonPill: React.CSSProperties = {
+    marginTop: 10,
+    display: "inline-flex",
+    alignItems: "center",
     padding: "6px 10px",
     borderRadius: 999,
-    fontSize: 12,
-    fontWeight: 1000 as any,
-    color: INK,
-    background: "rgba(255,255,255,0.78)",
+    fontSize: 11,
+    fontWeight: 950,
+    letterSpacing: 0.35,
+    color: "#2B2B33",
+    background:
+      ribbon === "gold"
+        ? "linear-gradient(135deg, rgba(255,216,154,0.95), rgba(255,216,154,0.62))"
+        : ribbon === "silver"
+        ? "linear-gradient(135deg, rgba(230,234,242,0.92), rgba(230,234,242,0.62))"
+        : "linear-gradient(135deg, rgba(246,182,200,0.92), rgba(246,182,200,0.60))",
     border: "1px solid rgba(255,255,255,0.70)",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
+    boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
   };
 
-  const bodyGrid: React.CSSProperties = {
+  // text colors (less boring than pure black)
+  const ink: React.CSSProperties = { color: "#5C1F3B" };
+  const inkStrong: React.CSSProperties = { color: "#4A0F2B" };
+
+  const titleWrap: React.CSSProperties = {
     marginTop: 10,
-    display: "grid",
-    gridTemplateColumns: "1.25fr 1fr",
-    gap: 10,
-    alignItems: "stretch",
+    textAlign: "center",
   };
 
-  const prizeBox: React.CSSProperties = {
-    borderRadius: 14,
-    padding: 12,
-    background: "rgba(255,255,255,0.26)", // ✅ less transparent panels
-    border: "1px solid rgba(255,255,255,0.55)",
+  const smallKicker: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 800,
+    opacity: 0.85,
+    ...ink,
   };
 
-  const label: React.CSSProperties = {
+  const titleText: React.CSSProperties = {
+    marginTop: 4,
+    fontSize: 18,
+    fontWeight: 950,
+    letterSpacing: 0.1,
+    lineHeight: 1.15,
+    ...inkStrong,
+  };
+
+  const prizeKicker: React.CSSProperties = {
+    marginTop: 14,
     fontSize: 12,
     fontWeight: 900,
-    color: LABEL,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
-    letterSpacing: 0.35,
+    opacity: 0.9,
+    ...ink,
+    textAlign: "center",
   };
 
-  // ✅ prize value in a pink/lavender ink, not boring black
-  const bigValue: React.CSSProperties = {
-    marginTop: 6,
-    fontSize: 26,
+  const prizeValue: React.CSSProperties = {
+    marginTop: 8,
+    fontSize: 34,
     fontWeight: 1000 as any,
-    color: ACCENT,
-    lineHeight: 1.05,
+    lineHeight: 1.0,
+    letterSpacing: 0.2,
+    textAlign: "center",
+    color: "#4A0F2B",
     textShadow: "0 1px 0 rgba(255,255,255,0.35)",
   };
 
-  const bigSub: React.CSSProperties = {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: 800,
-    color: INK_SOFT,
-  };
-
-  const rightStack: React.CSSProperties = {
+  const midGrid: React.CSSProperties = {
+    marginTop: 16,
     display: "grid",
-    gap: 8,
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
   };
 
-  const miniBox: React.CSSProperties = {
+  const mini: React.CSSProperties = {
     borderRadius: 14,
-    padding: 10,
-    background: "rgba(255,255,255,0.24)",
-    border: "1px solid rgba(255,255,255,0.52)",
+    padding: 12,
+    background: "rgba(255,255,255,0.42)", // ✅ less transparent
+    border: "1px solid rgba(0,0,0,0.06)",
+  };
+
+  const miniLabel: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 900,
+    letterSpacing: 0.25,
+    opacity: 0.85,
+    ...ink,
   };
 
   const miniValue: React.CSSProperties = {
-    marginTop: 4,
+    marginTop: 6,
     fontSize: 14,
-    fontWeight: 950 as any,
-    color: ACCENT2,
+    fontWeight: 950,
+    ...inkStrong,
   };
 
-  const footer: React.CSSProperties = {
+  const progressWrap: React.CSSProperties = {
     marginTop: 12,
+  };
+
+  const progressBar: React.CSSProperties = {
+    height: 10,
+    borderRadius: 999,
+    background: "rgba(0,0,0,0.08)",
+    overflow: "hidden",
+  };
+
+  const progressFill: React.CSSProperties = {
+    height: "100%",
+    width: `${soldPct ?? 0}%`,
+    borderRadius: 999,
+    background: "linear-gradient(90deg, rgba(246,182,200,0.95), rgba(203,183,246,0.85))",
+  };
+
+  const progressMeta: React.CSSProperties = {
+    marginTop: 10,
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "flex-end",
     gap: 10,
-    color: INK,
+    fontSize: 12,
+    fontWeight: 900,
+    ...ink,
   };
 
-  const footerLeft: React.CSSProperties = {
-    display: "grid",
-    gap: 4,
-    fontSize: 12,
-    color: INK_SOFT,
+  const endsRow: React.CSSProperties = {
+    marginTop: 14,
+    paddingTop: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
   };
 
-  const footerRight: React.CSSProperties = {
-    textAlign: "right",
-    fontSize: 12,
-    color: INK_SOFT,
+  const endsText: React.CSSProperties = {
+    fontSize: 14,
+    fontWeight: 950,
+    color: "#7B1B4D",
+    letterSpacing: 0.3,
+  };
+
+  const quickBar: React.CSSProperties = {
+    marginTop: 12,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    padding: 10,
+    borderRadius: 16,
+    background: "rgba(255,255,255,0.46)",
+    border: "1px solid rgba(0,0,0,0.06)",
+  };
+
+  const stepper: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  };
+
+  const stepBtn: React.CSSProperties = {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    background: "rgba(255,255,255,0.75)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    cursor: "pointer",
+    fontWeight: 950,
+    ...inkStrong,
+  };
+
+  const qtyPill: React.CSSProperties = {
+    minWidth: 34,
+    textAlign: "center",
+    fontWeight: 950,
+    ...inkStrong,
+  };
+
+  const enterBtn: React.CSSProperties = {
+    padding: "10px 12px",
+    borderRadius: 14,
+    background: "rgba(145, 247, 184, 0.92)",
+    border: "1px solid rgba(0,0,0,0.06)",
+    cursor: "pointer",
+    fontWeight: 950,
+    color: "#0B4A24",
     whiteSpace: "nowrap",
   };
 
   const copyToast: React.CSSProperties = {
-    marginTop: 8,
+    marginTop: 10,
     fontSize: 12,
     fontWeight: 900,
-    color: INK,
+    ...ink,
     opacity: 0.95,
+    textAlign: "center",
   };
+
+  // simple hover without CSS file dependency
+  const [isHover, setIsHover] = useState(false);
 
   return (
     <div
-      style={card}
+      style={{ ...card, ...(isHover ? hoverLift : null) }}
       role="button"
       tabIndex={0}
       onClick={() => onOpen(raffle.id)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onOpen(raffle.id);
       }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseEnter={() => setIsHover(true)}
+      onMouseLeave={() => setIsHover(false)}
       title="Open raffle"
     >
-      {/* shine */}
-      <div style={sheen} />
-
       {/* Ticket notches */}
-      <div style={leftNotch} />
-      <div style={rightNotch} />
-
-      {/* Podium ribbon (optional) */}
-      {ribbon && (
-        <div style={ribbonWrap}>
-          <div style={ribbonStyle(ribbon)}>{ribbon.toUpperCase()}</div>
-        </div>
-      )}
+      <div style={{ ...notch, left: -9 }} />
+      <div style={{ ...notch, right: -9 }} />
 
       <div style={topRow}>
-        <div style={title}>{raffle.name}</div>
-
-        <div style={chips}>
-          <div style={statusChip}>{displayStatus}</div>
-          <button style={shareBtn} onClick={onShareCopy} title="Copy raffle link">
-            Share link
-          </button>
+        <div style={rightChips}>
+          <div style={statusChip}>{displayStatus.toUpperCase()}</div>
         </div>
+
+        <button style={shareIconBtn} onClick={onShareCopy} title="Copy raffle link" aria-label="Copy link">
+          {/* share icon */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M18 8a3 3 0 1 0-2.82-4H15a3 3 0 0 0 .18 1L8.9 9.1a3 3 0 0 0-1.9-.7 3 3 0 1 0 2.82 4l6.2 3.1A3 3 0 1 0 17 13a3 3 0 0 0-.18 1l-6.2-3.1A3 3 0 0 0 9 10c0-.2 0-.4-.1-.6l6.3-4.1A3 3 0 0 0 18 8Z"
+              fill="#7B1B4D"
+              opacity="0.9"
+            />
+          </svg>
+        </button>
       </div>
 
-      <div style={bodyGrid}>
-        {/* Prize big */}
-        <div style={prizeBox}>
-          <div style={label}>Prize</div>
-          <div style={bigValue}>{fmtUsdc(raffle.winningPot)} USDC</div>
-          <div style={bigSub}>Winner gets this amount</div>
-        </div>
+      {/* Ribbon now sits below header, not blocking the title */}
+      {ribbon && <div style={ribbonPill}>{ribbonText(ribbon)}</div>}
 
-        {/* Small facts */}
-        <div style={rightStack}>
-          <div style={miniBox}>
-            <div style={label}>Ticket</div>
-            <div style={miniValue}>{fmtUsdc(raffle.ticketPrice)} USDC</div>
-          </div>
-
-          <div style={miniBox}>
-            <div style={label}>Fee</div>
-            <div style={miniValue}>{raffle.protocolFeePercent}%</div>
-          </div>
-        </div>
+      <div style={titleWrap}>
+        <div style={smallKicker}>Ppopgi</div>
+        <div style={titleText}>{raffle.name}</div>
       </div>
+
+      <div style={prizeKicker}>Winner gets</div>
+      <div style={prizeValue}>{fmtUsdc(raffle.winningPot)} USDC</div>
 
       <div style={tearLine} />
 
-      <div style={footer}>
-        <div style={footerLeft}>
-          <div>
-            <span style={label}>Status</span> <span style={{ fontWeight: 950, color: INK }}>{displayStatus}</span>
-          </div>
-          <div>
-            <span style={label}>Ends</span> <span style={{ fontWeight: 950, color: INK }}>{timeLine}</span>
-          </div>
+      <div style={midGrid}>
+        <div style={mini}>
+          <div style={miniLabel}>Ticket price</div>
+          <div style={miniValue}>{fmtUsdc(raffle.ticketPrice)} USDC</div>
         </div>
 
-        <div style={footerRight}>
-          <div>
-            <span style={label}>Tickets</span> <span style={{ fontWeight: 950, color: INK }}>{soldLine}</span>
-          </div>
-
-          {minLine && (
-            <div>
-              <span style={label}>Min</span> <span style={{ fontWeight: 950, color: INK }}>{minLine}</span>
-            </div>
-          )}
+        <div style={mini}>
+          <div style={miniLabel}>Fee</div>
+          <div style={miniValue}>{raffle.protocolFeePercent}%</div>
         </div>
       </div>
+
+      <div style={progressWrap}>
+        {soldPct !== null ? (
+          <>
+            <div style={progressBar}>
+              <div style={progressFill} />
+            </div>
+            <div style={progressMeta}>
+              <div>Min: {minLine ?? "—"}</div>
+              <div>{soldPct}% sold</div>
+            </div>
+          </>
+        ) : (
+          <div style={progressMeta}>
+            <div>Min: {minLine ?? "—"}</div>
+            <div>Tickets: {soldLine}</div>
+          </div>
+        )}
+      </div>
+
+      <div style={endsRow}>
+        <div style={endsText}>ENDS IN: {endsLine}</div>
+        {/* tiny clock */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"
+            stroke="#7B1B4D"
+            strokeWidth="2"
+            opacity="0.8"
+          />
+          <path
+            d="M12 7v6l4 2"
+            stroke="#7B1B4D"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.85"
+          />
+        </svg>
+      </div>
+
+      {/* Quick entry (Open only) */}
+      {canQuickEnter && (
+        <div
+          style={quickBar}
+          onClick={(e) => {
+            // prevent bar click opening the modal
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div style={stepper}>
+            <button style={stepBtn} onClick={(e) => (e.preventDefault(), e.stopPropagation(), dec())} aria-label="Decrease">
+              −
+            </button>
+            <div style={qtyPill}>{qty}</div>
+            <button style={stepBtn} onClick={(e) => (e.preventDefault(), e.stopPropagation(), inc())} aria-label="Increase">
+              +
+            </button>
+          </div>
+
+          <button style={enterBtn} onClick={onPressEnter} title="Enter this raffle">
+            Enter
+          </button>
+        </div>
+      )}
 
       {copyMsg && <div style={copyToast}>{copyMsg}</div>}
     </div>
