@@ -272,7 +272,7 @@ export default function App() {
 
       <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
 
-      <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} onOpenRaffle={openRaffle} />
+      <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} />
     </div>
   );
 }
