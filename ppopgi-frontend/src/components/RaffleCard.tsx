@@ -51,23 +51,44 @@ function baseStatusLabel(s: string) {
 type DisplayStatus = "Open" | "Finalizing" | "Drawing" | "Settled" | "Canceled" | "Getting ready" | "Unknown";
 
 function statusTheme(s: DisplayStatus) {
+  // ✅ Open = green
   if (s === "Open")
     return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
+
+  // ✅ Finalizing = BLUE + pulse
   if (s === "Finalizing")
+    return {
+      bg: "rgba(169, 212, 255, 0.95)",
+      fg: "#0B2E5C",
+      border: "1px solid rgba(0,0,0,0.10)",
+      pulse: true,
+    };
+
+  // ✅ Drawing = BLUE + pulse
+  if (s === "Drawing")
+    return {
+      bg: "rgba(169, 212, 255, 0.95)",
+      fg: "#0B2E5C",
+      border: "1px solid rgba(0,0,0,0.10)",
+      pulse: true,
+    };
+
+  // ✅ Settled = gold
+  if (s === "Settled")
+    return { bg: "rgba(255, 216, 154, 0.92)", fg: "#4A2A00", border: "1px solid rgba(0,0,0,0.08)" };
+
+  // ✅ Canceled = RED (no pulse)
+  if (s === "Canceled")
     return {
       bg: "rgba(255, 120, 140, 0.92)",
       fg: "#5A0012",
       border: "1px solid rgba(0,0,0,0.10)",
-      pulse: true,
     };
-  if (s === "Drawing")
-    return { bg: "rgba(203, 183, 246, 0.92)", fg: "#2E1C5C", border: "1px solid rgba(0,0,0,0.08)" };
-  if (s === "Settled")
-    return { bg: "rgba(255, 216, 154, 0.92)", fg: "#4A2A00", border: "1px solid rgba(0,0,0,0.08)" };
-  if (s === "Canceled")
-    return { bg: "rgba(230, 234, 242, 0.92)", fg: "#2B2B33", border: "1px solid rgba(0,0,0,0.08)" };
+
+  // ✅ Getting ready = purple (calm)
   if (s === "Getting ready")
-    return { bg: "rgba(169, 212, 255, 0.92)", fg: "#133A66", border: "1px solid rgba(0,0,0,0.08)" };
+    return { bg: "rgba(203, 183, 246, 0.92)", fg: "#2E1C5C", border: "1px solid rgba(0,0,0,0.08)" };
+
   return { bg: "rgba(255,255,255,0.72)", fg: "#5C2A3E", border: "1px solid rgba(0,0,0,0.08)" };
 }
 
@@ -129,6 +150,15 @@ function formatWhen(tsSeconds: string | null | undefined) {
   }
 }
 
+function normalizeCancelReason(reason?: string | null) {
+  const r = (reason || "").trim().toLowerCase();
+  // ✅ your main reason
+  if (r.includes("min") && r.includes("ticket")) return "Min tickets sold not reached";
+  if (r.includes("minimum") && r.includes("ticket")) return "Min tickets sold not reached";
+  if (r.includes("not enough") && r.includes("ticket")) return "Min tickets sold not reached";
+  return reason?.trim() ? reason.trim() : "Canceled";
+}
+
 export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
@@ -150,14 +180,28 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   async function onShareCopy(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+
+    const msg = "Link copied — share it with your friends!";
     try {
+      // ✅ Native share sheet first (mobile, supported browsers)
+      if (navigator.share) {
+        await navigator.share({ url: shareUrl, title: raffle.name, text: "Join this raffle" });
+        // If share sheet used, still give a small confirmation
+        setCopyMsg("Shared!");
+        window.setTimeout(() => setCopyMsg(null), 1200);
+        return;
+      }
+
+      // ✅ Clipboard fallback
       await navigator.clipboard.writeText(shareUrl);
-      setCopyMsg("Link copied");
+      setCopyMsg(msg);
     } catch {
+      // final fallback
       window.prompt("Copy this link:", shareUrl);
       setCopyMsg("Copy the link");
     }
-    window.setTimeout(() => setCopyMsg(null), 1200);
+
+    window.setTimeout(() => setCopyMsg(null), 1400);
   }
 
   // one user-facing status
@@ -227,8 +271,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       return raffle.winner ? "Someone won!" : "Settled";
     }
     if (displayStatus === "Canceled") {
-      const reason = raffle.canceledReason?.trim();
-      return reason ? reason : "Canceled";
+      return normalizeCancelReason(raffle.canceledReason);
     }
     if (displayStatus === "Drawing" || displayStatus === "Finalizing") return "Waiting for the result";
     return null;
@@ -318,9 +361,10 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     cursor: "pointer",
   };
 
+  // ✅ Move toast a bit higher so it doesn't collide with the "Ppopgi" title
   const copyToast: React.CSSProperties = {
     position: "absolute",
-    top: 54,
+    top: 44,
     left: 12,
     right: 12,
     padding: "8px 10px",
@@ -473,7 +517,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const pastLine1: React.CSSProperties = { fontSize: 12, fontWeight: 950, color: inkStrong, lineHeight: 1.25 };
-  const pastLine2: React.CSSProperties = { fontSize: 12, fontWeight: 900, color: ink, opacity: 0.92, lineHeight: 1.25 };
+  const pastLine2: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 900,
+    color: ink,
+    opacity: 0.92,
+    lineHeight: 1.25,
+  };
 
   const bottomRow: React.CSSProperties = {
     marginTop: 14,
@@ -485,6 +535,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const bottomText: React.CSSProperties = { fontSize: 14, fontWeight: 950, color: inkStrong, letterSpacing: 0.2 };
+
+  // ✅ Finalizing/Drawing bottom line should pulse blue too
+  const pulseBottom = displayStatus === "Finalizing" || displayStatus === "Drawing";
 
   return (
     <div
@@ -509,7 +562,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
           {displayStatus.toUpperCase()}
         </div>
 
-        <button style={shareBtn} onClick={onShareCopy} title="Copy link" aria-label="Copy link">
+        <button style={shareBtn} onClick={onShareCopy} title="Share" aria-label="Share">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M14 3h7v7" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M21 3l-9 9" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -598,7 +651,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
           </div>
         ) : (
           <div style={pastBlock}>
-            <div style={pastLine1}>{pastHeadline ?? bottomLine}</div>
+            <div style={pastLine1} className={pulseBottom ? "pp-rc-pulse" : undefined}>
+              {pastHeadline ?? bottomLine}
+            </div>
             <div style={pastLine2}>{pastSubline ?? ""}</div>
           </div>
         )}
@@ -606,18 +661,30 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
 
       <div style={bottomRow}>
         <div style={bottomText}>
-          {displayStatus === "Open" || displayStatus === "Getting ready" ? `Ends in ${bottomLine}` : bottomLine}
+          {displayStatus === "Open" || displayStatus === "Getting ready" ? (
+            `Ends in ${bottomLine}`
+          ) : (
+            <span className={pulseBottom ? "pp-rc-pulse" : undefined} style={pulseBottom ? { color: "#0B2E5C" } : undefined}>
+              {bottomLine}
+            </span>
+          )}
         </div>
 
+        {/* ✅ Replace the “arrow” with a simple sparkle icon */}
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" stroke={inkStrong} strokeWidth="2" opacity="0.8" />
           <path
-            d="M12 7v6l4 2"
+            d="M12 2l1.2 4.5L18 8l-4.8 1.5L12 14l-1.2-4.5L6 8l4.8-1.5L12 2Z"
             stroke={inkStrong}
             strokeWidth="2"
-            strokeLinecap="round"
             strokeLinejoin="round"
             opacity="0.85"
+          />
+          <path
+            d="M19 13l.7 2.5L22 16l-2.3.5L19 19l-.7-2.5L16 16l2.3-.5L19 13Z"
+            stroke={inkStrong}
+            strokeWidth="2"
+            strokeLinejoin="round"
+            opacity="0.75"
           />
         </svg>
       </div>
