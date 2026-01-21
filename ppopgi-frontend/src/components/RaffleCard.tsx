@@ -29,7 +29,6 @@ function formatEndsIn(deadlineSeconds: string, nowMs: number) {
   if (diffMs <= 0) return "Ended";
 
   const totalSec = Math.floor(diffMs / 1000);
-
   const days = Math.floor(totalSec / 86400);
   const hours = Math.floor((totalSec % 86400) / 3600);
   const minutes = Math.floor((totalSec % 3600) / 60);
@@ -52,6 +51,7 @@ function statusLabel(s: string) {
 export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [hover, setHover] = useState(false);
 
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -90,16 +90,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const deadlinePassed = deadlineMs > 0 ? nowMs >= deadlineMs : false;
 
   const displayStatus = useMemo(() => {
-    // If indexer still says OPEN but deadline passed: communicate what users expect.
     if (raffle.status === "OPEN" && deadlinePassed) return "Finalizing";
     return statusLabel(raffle.status);
   }, [raffle.status, deadlinePassed]);
 
   const timeLine = useMemo(() => {
-    // If settled/canceled: time is not the key. Use “Ended”.
     if (raffle.status === "COMPLETED" || raffle.status === "CANCELED") return "Ended";
     if (raffle.status === "DRAWING") return "In progress";
-    // OPEN / FUNDING_PENDING: show countdown
     return formatEndsIn(raffle.deadline, nowMs);
   }, [raffle.status, raffle.deadline, nowMs]);
 
@@ -111,32 +108,57 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   }, [raffle.sold, raffle.maxTickets]);
 
   const minLine = useMemo(() => {
-    // your subgraph item may not include minTickets on list — if missing, hide quietly
     const anyRaffle = raffle as any;
     const min = anyRaffle?.minTickets;
     if (!min) return null;
     return String(min);
   }, [raffle]);
 
-  // ── styles (ticket-like, pinker, smaller, rectangular) ──
+  // ── theme-ish colors (more lively than plain black) ──
+  const INK = "#2B2B33";
+  const INK_SOFT = "rgba(43,43,51,0.82)";
+  const LABEL = "rgba(43,43,51,0.72)";
+  const ACCENT = "#B84E7B"; // sakura ink
+  const ACCENT2 = "#6B4BB8"; // lavender ink
+
+  // ── styles (ticket-like, pinker, less “see-through”) ──
   const card: React.CSSProperties = {
     position: "relative",
     width: "100%",
-    maxWidth: 420, // ✅ ticket width (prevents huge full-width cards)
+    maxWidth: 420,
     borderRadius: 18,
     padding: 14,
     cursor: "pointer",
     userSelect: "none",
-
-    // ✅ more pink + more opacity
-    background:
-      "linear-gradient(135deg, rgba(246,182,200,0.44), rgba(203,183,246,0.24) 55%, rgba(255,216,154,0.18))",
-    border: "1px solid rgba(255,255,255,0.55)",
-    boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
-    backdropFilter: "blur(12px)",
-
-    // ✅ subtle “ticket paper” texture
     overflow: "hidden",
+
+    // ✅ less transparent + more “pink paper”
+    background:
+      "linear-gradient(135deg," +
+      " rgba(246,182,200,0.78) 0%," +
+      " rgba(203,183,246,0.46) 55%," +
+      " rgba(250,209,184,0.38) 100%)",
+
+    // subtle “paper” inner glow
+    boxShadow: hover
+      ? "0 14px 34px rgba(0,0,0,0.18)"
+      : "0 10px 26px rgba(0,0,0,0.14)",
+    border: "1px solid rgba(255,255,255,0.62)",
+    backdropFilter: "blur(8px)", // ✅ slightly less blur so color reads better
+    transform: hover ? "translateY(-4px)" : "translateY(0)",
+    transition: "transform 140ms ease, box-shadow 140ms ease",
+
+    color: INK,
+  };
+
+  const sheen: React.CSSProperties = {
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+    background:
+      "radial-gradient(900px 260px at 20% 10%, rgba(255,255,255,0.35), transparent 60%)," +
+      "radial-gradient(700px 220px at 80% 30%, rgba(255,255,255,0.22), transparent 60%)",
+    opacity: 0.9,
   };
 
   const tearLine: React.CSSProperties = {
@@ -146,8 +168,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     bottom: 54,
     height: 1,
     background:
-      "repeating-linear-gradient(90deg, rgba(255,255,255,0.55), rgba(255,255,255,0.55) 6px, rgba(255,255,255,0) 6px, rgba(255,255,255,0) 12px)",
-    opacity: 0.7,
+      "repeating-linear-gradient(90deg, rgba(255,255,255,0.72), rgba(255,255,255,0.72) 6px, rgba(255,255,255,0) 6px, rgba(255,255,255,0) 12px)",
+    opacity: 0.9,
     pointerEvents: "none",
   };
 
@@ -155,34 +177,33 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     position: "absolute",
     top: "50%",
     transform: "translateY(-50%)",
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     borderRadius: 999,
-    background: "rgba(255,255,255,0.20)", // “cutout” feel but still transparent
-    border: "1px solid rgba(255,255,255,0.45)",
-    boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.05)",
+    background: "rgba(255,255,255,0.16)",
+    border: "1px solid rgba(255,255,255,0.55)",
+    boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.06)",
     pointerEvents: "none",
   };
+  const leftNotch: React.CSSProperties = { ...notchBase, left: -11 };
+  const rightNotch: React.CSSProperties = { ...notchBase, right: -11 };
 
-  const leftNotch: React.CSSProperties = { ...notchBase, left: -10 };
-  const rightNotch: React.CSSProperties = { ...notchBase, right: -10 };
-
+  // ✅ ribbon moved to top-right and never overlaps title
   const ribbonWrap: React.CSSProperties = {
     position: "absolute",
     top: 10,
-    left: 10,
+    right: 10,
     pointerEvents: "none",
+    zIndex: 2,
   };
 
   const ribbonStyle = (kind: "gold" | "silver" | "bronze"): React.CSSProperties => {
     const bg =
       kind === "gold"
-        ? "linear-gradient(135deg, rgba(255,216,154,0.95), rgba(255,216,154,0.55))"
+        ? "linear-gradient(135deg, rgba(255,216,154,0.96), rgba(255,216,154,0.62))"
         : kind === "silver"
-        ? "linear-gradient(135deg, rgba(230,234,242,0.92), rgba(230,234,242,0.55))"
-        : "linear-gradient(135deg, rgba(246,182,200,0.90), rgba(246,182,200,0.50))";
-
-    const text = kind === "silver" ? "#2B2B33" : "#2B2B33";
+        ? "linear-gradient(135deg, rgba(232,236,245,0.95), rgba(232,236,245,0.62))"
+        : "linear-gradient(135deg, rgba(246,182,200,0.94), rgba(246,182,200,0.62))";
 
     return {
       display: "inline-flex",
@@ -191,12 +212,12 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       padding: "6px 10px",
       borderRadius: 999,
       background: bg,
-      border: "1px solid rgba(255,255,255,0.70)",
-      color: text,
-      fontWeight: 900,
+      border: "1px solid rgba(255,255,255,0.74)",
+      color: INK,
+      fontWeight: 1000 as any,
       fontSize: 11,
-      letterSpacing: 0.3,
-      boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
+      letterSpacing: 0.35,
+      boxShadow: "0 10px 18px rgba(0,0,0,0.12)",
     };
   };
 
@@ -207,13 +228,15 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     gap: 10,
   };
 
+  // ✅ reserve space for chips so title never collides
   const title: React.CSSProperties = {
-    fontWeight: 900,
+    fontWeight: 1000 as any,
     fontSize: 16,
-    lineHeight: 1.2,
-    color: "#2B2B33",
+    lineHeight: 1.15,
+    color: INK,
     textAlign: "left",
-    paddingRight: 6,
+    paddingRight: 130, // room for status + share
+    maxWidth: "100%",
   };
 
   const chips: React.CSSProperties = {
@@ -221,16 +244,17 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     gap: 8,
     alignItems: "center",
     flexShrink: 0,
+    zIndex: 1,
   };
 
   const statusChip: React.CSSProperties = {
     padding: "6px 10px",
     borderRadius: 999,
     fontSize: 12,
-    fontWeight: 900,
-    color: "#2B2B33",
-    background: "rgba(255,255,255,0.70)",
-    border: "1px solid rgba(255,255,255,0.65)",
+    fontWeight: 1000 as any,
+    color: INK,
+    background: "rgba(255,255,255,0.78)",
+    border: "1px solid rgba(255,255,255,0.70)",
     backdropFilter: "blur(10px)",
     whiteSpace: "nowrap",
   };
@@ -239,10 +263,10 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     padding: "6px 10px",
     borderRadius: 999,
     fontSize: 12,
-    fontWeight: 900,
-    color: "#2B2B33",
-    background: "rgba(255,255,255,0.70)",
-    border: "1px solid rgba(255,255,255,0.65)",
+    fontWeight: 1000 as any,
+    color: INK,
+    background: "rgba(255,255,255,0.78)",
+    border: "1px solid rgba(255,255,255,0.70)",
     cursor: "pointer",
     whiteSpace: "nowrap",
   };
@@ -250,7 +274,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const bodyGrid: React.CSSProperties = {
     marginTop: 10,
     display: "grid",
-    gridTemplateColumns: "1.25fr 1fr", // prize bigger left, info stack right
+    gridTemplateColumns: "1.25fr 1fr",
     gap: 10,
     alignItems: "stretch",
   };
@@ -258,33 +282,33 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const prizeBox: React.CSSProperties = {
     borderRadius: 14,
     padding: 12,
-    background: "rgba(255,255,255,0.22)",
-    border: "1px solid rgba(255,255,255,0.45)",
+    background: "rgba(255,255,255,0.26)", // ✅ less transparent panels
+    border: "1px solid rgba(255,255,255,0.55)",
   };
 
   const label: React.CSSProperties = {
     fontSize: 12,
-    fontWeight: 800,
-    opacity: 0.85,
-    color: "#2B2B33",
+    fontWeight: 900,
+    color: LABEL,
     textTransform: "uppercase",
     letterSpacing: 0.35,
   };
 
+  // ✅ prize value in a pink/lavender ink, not boring black
   const bigValue: React.CSSProperties = {
     marginTop: 6,
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 1000 as any,
-    color: "#2B2B33",
+    color: ACCENT,
     lineHeight: 1.05,
+    textShadow: "0 1px 0 rgba(255,255,255,0.35)",
   };
 
   const bigSub: React.CSSProperties = {
-    marginTop: 2,
+    marginTop: 3,
     fontSize: 12,
     fontWeight: 800,
-    opacity: 0.9,
-    color: "#2B2B33",
+    color: INK_SOFT,
   };
 
   const rightStack: React.CSSProperties = {
@@ -295,15 +319,15 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const miniBox: React.CSSProperties = {
     borderRadius: 14,
     padding: 10,
-    background: "rgba(255,255,255,0.20)",
-    border: "1px solid rgba(255,255,255,0.40)",
+    background: "rgba(255,255,255,0.24)",
+    border: "1px solid rgba(255,255,255,0.52)",
   };
 
   const miniValue: React.CSSProperties = {
     marginTop: 4,
     fontSize: 14,
-    fontWeight: 900,
-    color: "#2B2B33",
+    fontWeight: 950 as any,
+    color: ACCENT2,
   };
 
   const footer: React.CSSProperties = {
@@ -312,28 +336,28 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     justifyContent: "space-between",
     alignItems: "flex-end",
     gap: 10,
-    color: "#2B2B33",
+    color: INK,
   };
 
   const footerLeft: React.CSSProperties = {
     display: "grid",
     gap: 4,
     fontSize: 12,
-    opacity: 0.92,
+    color: INK_SOFT,
   };
 
   const footerRight: React.CSSProperties = {
     textAlign: "right",
     fontSize: 12,
-    opacity: 0.92,
+    color: INK_SOFT,
     whiteSpace: "nowrap",
   };
 
   const copyToast: React.CSSProperties = {
     marginTop: 8,
     fontSize: 12,
-    fontWeight: 800,
-    color: "#2B2B33",
+    fontWeight: 900,
+    color: INK,
     opacity: 0.95,
   };
 
@@ -346,8 +370,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onOpen(raffle.id);
       }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       title="Open raffle"
     >
+      {/* shine */}
+      <div style={sheen} />
+
       {/* Ticket notches */}
       <div style={leftNotch} />
       <div style={rightNotch} />
@@ -397,25 +426,21 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       <div style={footer}>
         <div style={footerLeft}>
           <div>
-            <span style={label}>Status</span>{" "}
-            <span style={{ fontWeight: 900 }}>{displayStatus}</span>
+            <span style={label}>Status</span> <span style={{ fontWeight: 950, color: INK }}>{displayStatus}</span>
           </div>
           <div>
-            <span style={label}>Ends</span>{" "}
-            <span style={{ fontWeight: 900 }}>{timeLine}</span>
+            <span style={label}>Ends</span> <span style={{ fontWeight: 950, color: INK }}>{timeLine}</span>
           </div>
         </div>
 
         <div style={footerRight}>
           <div>
-            <span style={label}>Tickets</span>{" "}
-            <span style={{ fontWeight: 900 }}>{soldLine}</span>
+            <span style={label}>Tickets</span> <span style={{ fontWeight: 950, color: INK }}>{soldLine}</span>
           </div>
 
           {minLine && (
             <div>
-              <span style={label}>Min</span>{" "}
-              <span style={{ fontWeight: 900 }}>{minLine}</span>
+              <span style={label}>Min</span> <span style={{ fontWeight: 950, color: INK }}>{minLine}</span>
             </div>
           )}
         </div>
