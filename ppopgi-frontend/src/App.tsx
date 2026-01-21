@@ -13,7 +13,7 @@ import { ExplorePage } from "./pages/ExplorePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
 
-// ✅ Random backgrounds
+// ✅ Random backgrounds (picked once per page load)
 import bg1 from "./assets/backgrounds/bg1.webp";
 import bg2 from "./assets/backgrounds/bg2.webp";
 import bg3 from "./assets/backgrounds/bg3.webp";
@@ -91,7 +91,7 @@ export default function App() {
     if (page === "dashboard" && !account) setPage("home");
   }, [page, account]);
 
-  const { bigPrizes, endingSoon, recentlyFinalized, note: homeNote, refetch, mode } = useHomeRaffles();
+  const { items, bigPrizes, endingSoon, note: homeNote, refetch } = useHomeRaffles();
 
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear.");
@@ -181,14 +181,16 @@ export default function App() {
     border: "1px solid rgba(0,0,0,0.28)",
   };
 
+  // “section” card wrapper (clear separation, matches raffle-card vibe)
   const sectionCard: React.CSSProperties = {
     marginTop: 18,
-    padding: "16px 16px 14px",
     borderRadius: 22,
-    background: "rgba(255,255,255,0.20)",
-    border: "1px solid rgba(255,255,255,0.55)",
+    padding: 16,
+    border: "1px solid rgba(255,255,255,0.62)",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.50), rgba(255,255,255,0.18) 55%, rgba(255,255,255,0.22))",
+    boxShadow: "0 18px 40px rgba(0,0,0,0.12)",
     backdropFilter: "blur(12px)",
-    boxShadow: "0 16px 34px rgba(0,0,0,0.10)",
   };
 
   const sectionTitleRow: React.CSSProperties = {
@@ -196,56 +198,79 @@ export default function App() {
     alignItems: "baseline",
     justifyContent: "space-between",
     gap: 12,
+    marginBottom: 12,
     flexWrap: "wrap",
   };
 
-  const sectionTitle: React.CSSProperties = {
-    margin: 0,
-    fontSize: 18,
-    fontWeight: 950,
-    letterSpacing: 0.2,
+  const sectionTitlePill: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 12px",
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.72)",
+    border: "1px solid rgba(0,0,0,0.06)",
     color: "#4A0F2B",
-    textShadow: "0 1px 0 rgba(255,255,255,0.35)",
+    fontWeight: 950,
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    fontSize: 12,
   };
 
   const sectionSub: React.CSSProperties = {
-    marginTop: 6,
-    fontSize: 13,
-    fontWeight: 800,
-    opacity: 0.9,
-    color: "#5C1F3B",
-  };
-
-  const smallBadge: React.CSSProperties = {
     fontSize: 12,
-    fontWeight: 900,
-    padding: "6px 10px",
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.60)",
-    border: "1px solid rgba(255,255,255,0.65)",
+    fontWeight: 800,
+    opacity: 0.78,
     color: "#4A0F2B",
     whiteSpace: "nowrap",
+  };
+
+  const homeMeta: React.CSSProperties = {
+    marginTop: 12,
+    fontSize: 13,
+    opacity: 0.9,
+    padding: "10px 12px",
+    borderRadius: 14,
+    background: "rgba(255,255,255,0.60)",
+    border: "1px solid rgba(0,0,0,0.06)",
+    backdropFilter: "blur(10px)",
   };
 
   /* ───────────── render helpers ───────────── */
 
   const podium = useMemo(() => {
+    // Sort by winningPot descending (BigInt safe)
     const sorted = [...bigPrizes].sort((a, b) => {
       try {
         const A = BigInt(a.winningPot || "0");
         const B = BigInt(b.winningPot || "0");
-        return A === B ? 0 : A < B ? 1 : -1;
+        return A === B ? 0 : A < B ? 1 : -1; // desc
       } catch {
         return 0;
       }
     });
+
     const top3 = sorted.slice(0, 3);
-    return { gold: top3[0] || null, silver: top3[1] || null, bronze: top3[2] || null };
+    return {
+      gold: top3[0] || null,
+      silver: top3[1] || null,
+      bronze: top3[2] || null,
+    };
   }, [bigPrizes]);
 
   const endingSoonSorted = useMemo(() => {
+    // Soonest deadline on the left
     return [...endingSoon].sort((a, b) => Number(a.deadline || "0") - Number(b.deadline || "0"));
   }, [endingSoon]);
+
+  // ✅ NEW: Recently settled (top 5, most recent on the left)
+  const recentlySettled = useMemo(() => {
+    const all = items ?? [];
+    return [...all]
+      .filter((r) => r.status === "COMPLETED")
+      .sort((a, b) => Number(b.completedAt || "0") - Number(a.completedAt || "0"))
+      .slice(0, 5);
+  }, [items]);
 
   return (
     <div style={pageBg}>
@@ -292,8 +317,8 @@ export default function App() {
             </div>
           </div>
 
-          {page === "home" && homeNote && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.88 }}>{homeNote}</div>}
-          {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{createdHint}</div>}
+          {page === "home" && homeNote && <div style={homeMeta}>{homeNote}</div>}
+          {createdHint && <div style={homeMeta}>{createdHint}</div>}
 
           {/* HOME */}
           {page === "home" && (
@@ -301,18 +326,19 @@ export default function App() {
               {/* Big prizes */}
               <div style={sectionCard}>
                 <div style={sectionTitleRow}>
-                  <h3 style={sectionTitle}>Big prizes right now</h3>
-                  <span style={smallBadge}>{mode === "live" ? "Live data" : "Fast view"}</span>
+                  <div style={sectionTitlePill}>🏆 Big prizes right now</div>
+                  <div style={sectionSub}>Top 3 by prize pool</div>
                 </div>
-                <div style={sectionSub}>Top prizes on Etherlink right now.</div>
 
-                <div className="pp-podium" style={{ marginTop: 12 }}>
+                <div className="pp-podium">
                   <div className="pp-podium__silver">
                     {podium.silver ? <RaffleCard raffle={podium.silver} onOpen={openRaffle} ribbon="silver" /> : null}
                   </div>
+
                   <div className="pp-podium__gold">
                     {podium.gold ? <RaffleCard raffle={podium.gold} onOpen={openRaffle} ribbon="gold" /> : null}
                   </div>
+
                   <div className="pp-podium__bronze">
                     {podium.bronze ? <RaffleCard raffle={podium.bronze} onOpen={openRaffle} ribbon="bronze" /> : null}
                   </div>
@@ -324,12 +350,11 @@ export default function App() {
               {/* Ending soon */}
               <div style={sectionCard}>
                 <div style={sectionTitleRow}>
-                  <h3 style={sectionTitle}>Ending soon</h3>
-                  <span style={smallBadge}>Soonest on the left</span>
+                  <div style={sectionTitlePill}>⏳ Ending soon</div>
+                  <div style={sectionSub}>Soonest deadlines first</div>
                 </div>
-                <div style={sectionSub}>The ones closest to closing (left → right).</div>
 
-                <div className="pp-rowTickets" style={{ marginTop: 12 }}>
+                <div className="pp-rowTickets">
                   {endingSoonSorted.map((r) => (
                     <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
                   ))}
@@ -337,24 +362,26 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Recently finalized */}
+              {/* ✅ NEW: Recently finalized (settled) */}
               <div style={sectionCard}>
                 <div style={sectionTitleRow}>
-                  <h3 style={sectionTitle}>Recently finalized</h3>
-                  {mode === "live" ? <span style={smallBadge}>Not available in live mode</span> : null}
+                  <div style={sectionTitlePill}>✨ Recently settled</div>
+                  <div style={sectionSub}>Latest settlements first</div>
                 </div>
-                <div style={sectionSub}>Most recent on the left.</div>
 
-                <div className="pp-rowTickets" style={{ marginTop: 12 }}>
-                  {recentlyFinalized.map((r) => (
+                <div className="pp-rowTickets">
+                  {recentlySettled.map((r) => (
                     <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
                   ))}
-                  {recentlyFinalized.length === 0 && (
-                    <div style={{ opacity: 0.85 }}>
-                      {mode === "live" ? "This section appears when fast view is available." : "No finalized raffles yet."}
-                    </div>
+                  {recentlySettled.length === 0 && (
+                    <div style={{ opacity: 0.85 }}>No raffles have been settled recently.</div>
                   )}
                 </div>
+              </div>
+
+              {/* tiny suggestion space (optional / harmless) */}
+              <div style={{ marginTop: 14, fontSize: 12, opacity: 0.78, paddingLeft: 2 }}>
+                Tip: tap any ticket to see details, participants, and history.
               </div>
             </>
           )}
