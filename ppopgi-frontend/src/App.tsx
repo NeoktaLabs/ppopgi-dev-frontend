@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useSession } from "./state/useSession";
 import { SignInModal } from "./components/SignInModal";
 import { DisclaimerGate } from "./components/DisclaimerGate";
@@ -12,6 +12,17 @@ import { useHomeRaffles } from "./hooks/useHomeRaffles";
 import { ExplorePage } from "./pages/ExplorePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
+
+// ✅ Random backgrounds (picked once per page load)
+import bg1 from "./assets/backgrounds/bg1.webp";
+import bg2 from "./assets/backgrounds/bg2.webp";
+import bg3 from "./assets/backgrounds/bg3.webp";
+
+const BACKGROUNDS = [bg1, bg2, bg3];
+
+function pickRandomBg() {
+  return BACKGROUNDS[Math.floor(Math.random() * BACKGROUNDS.length)];
+}
 
 function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -57,6 +68,9 @@ function setRaffleQuery(id: string | null) {
 }
 
 export default function App() {
+  // ✅ pick once per page load (no flicker, no rerandomizing)
+  const chosenBg = useMemo(() => pickRandomBg(), []);
+
   // zustand session is a mirror only
   const setSession = useSession((s) => s.set);
   const clearSession = useSession((s) => s.clear);
@@ -179,100 +193,119 @@ export default function App() {
   const grid: React.CSSProperties = { marginTop: 8, display: "grid", gap: 10 };
 
   return (
-    <div style={{ padding: 20 }}>
-      <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
+    <div
+      style={{
+        minHeight: "100vh",
+        backgroundImage: `url(${chosenBg})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundAttachment: "fixed",
+      }}
+    >
+      {/* ✅ soft overlay for readability, keeps background visible */}
+      <div
+        style={{
+          minHeight: "100vh",
+          padding: 20,
+          background:
+            "radial-gradient(900px 520px at 15% 10%, rgba(246,182,200,0.18), transparent 60%)," +
+            "radial-gradient(900px 520px at 85% 5%, rgba(169,212,255,0.16), transparent 60%)," +
+            "rgba(255,255,255,0.03)",
+        }}
+      >
+        <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
 
-      {/* Top bar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <b style={{ cursor: "pointer" }} onClick={() => setPage("home")}>
-          Ppopgi
-        </b>
+        {/* Top bar */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <b style={{ cursor: "pointer" }} onClick={() => setPage("home")}>
+            Ppopgi
+          </b>
 
-        <div style={{ display: "flex", gap: 10 }}>
-          <button style={page === "explore" ? topBtnActive : topBtn} onClick={() => setPage("explore")}>
-            Explore
-          </button>
-
-          {account && (
-            <button
-              style={page === "dashboard" ? topBtnActive : topBtn}
-              onClick={() => setPage("dashboard")}
-              title="Your created + joined raffles"
-            >
-              Dashboard
+          <div style={{ display: "flex", gap: 10 }}>
+            <button style={page === "explore" ? topBtnActive : topBtn} onClick={() => setPage("explore")}>
+              Explore
             </button>
-          )}
 
-          <button style={topBtn} onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
-            Create
-          </button>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button style={topBtn} onClick={() => setCashierOpen(true)}>
-            Cashier
-          </button>
-
-          {!account ? (
-            <button style={topBtn} onClick={() => setSignInOpen(true)}>
-              Sign in
-            </button>
-          ) : (
-            <>
-              <span style={{ fontSize: 13, opacity: 0.9 }}>Your account: {short(account)}</span>
-              <button style={topBtn} onClick={onSignOut}>
-                Sign out
+            {account && (
+              <button
+                style={page === "dashboard" ? topBtnActive : topBtn}
+                onClick={() => setPage("dashboard")}
+                title="Your created + joined raffles"
+              >
+                Dashboard
               </button>
-            </>
-          )}
+            )}
+
+            <button style={topBtn} onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
+              Create
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button style={topBtn} onClick={() => setCashierOpen(true)}>
+              Cashier
+            </button>
+
+            {!account ? (
+              <button style={topBtn} onClick={() => setSignInOpen(true)}>
+                Sign in
+              </button>
+            ) : (
+              <>
+                <span style={{ fontSize: 13, opacity: 0.9 }}>Your account: {short(account)}</span>
+                <button style={topBtn} onClick={onSignOut}>
+                  Sign out
+                </button>
+              </>
+            )}
+          </div>
         </div>
+
+        {/* Home-only note (ExplorePage shows its own note inside) */}
+        {page === "home" && homeNote && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>{homeNote}</div>}
+
+        {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>{createdHint}</div>}
+
+        {/* HOME */}
+        {page === "home" && (
+          <>
+            <div style={sectionWrap}>
+              <h3 style={{ margin: 0 }}>Big prizes right now</h3>
+              <div style={grid}>
+                {bigPrizes.map((r) => (
+                  <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+                ))}
+                {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 22 }}>
+              <h3 style={{ margin: 0 }}>Ending soon</h3>
+              <div style={grid}>
+                {endingSoon.map((r) => (
+                  <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+                ))}
+                {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* EXPLORE */}
+        {page === "explore" && <ExplorePage onOpenRaffle={openRaffle} />}
+
+        {/* DASHBOARD */}
+        {page === "dashboard" && <DashboardPage account={account} onOpenRaffle={openRaffle} />}
+
+        {/* Modals */}
+        <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
+        <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
+
+        <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
+
+        <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} />
       </div>
-
-      {/* Home-only note (ExplorePage shows its own note inside) */}
-      {page === "home" && homeNote && (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>{homeNote}</div>
-      )}
-
-      {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>{createdHint}</div>}
-
-      {/* HOME */}
-      {page === "home" && (
-        <>
-          <div style={sectionWrap}>
-            <h3 style={{ margin: 0 }}>Big prizes right now</h3>
-            <div style={grid}>
-              {bigPrizes.map((r) => (
-                <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-              ))}
-              {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
-            </div>
-          </div>
-
-          <div style={{ marginTop: 22 }}>
-            <h3 style={{ margin: 0 }}>Ending soon</h3>
-            <div style={grid}>
-              {endingSoon.map((r) => (
-                <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-              ))}
-              {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* EXPLORE */}
-      {page === "explore" && <ExplorePage onOpenRaffle={openRaffle} />}
-
-      {/* DASHBOARD */}
-      {page === "dashboard" && <DashboardPage account={account} onOpenRaffle={openRaffle} />}
-
-      {/* Modals */}
-      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
-      <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
-
-      <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
-
-      <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} />
     </div>
   );
 }
