@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { formatUnits } from "ethers";
+import "./raffleCard.css";
 
 type Props = {
   raffle: RaffleListItem;
@@ -20,7 +21,7 @@ function fmtUsdc(raw: string) {
 // ✅ Live countdown: "Ends in 2d 3h 10m 05s"
 function formatEndsIn(deadlineSeconds: string, nowMs: number) {
   const n = Number(deadlineSeconds);
-  if (!Number.isFinite(n) || n <= 0) return "Unknown time";
+  if (!Number.isFinite(n) || n <= 0) return "Time unknown";
 
   const deadlineMs = n * 1000;
   const diffMs = deadlineMs - nowMs;
@@ -48,6 +49,15 @@ function statusLabel(s: string) {
   if (s === "COMPLETED") return "Settled";
   if (s === "CANCELED") return "Canceled";
   return "Unknown";
+}
+
+function statusTone(s: string) {
+  if (s === "OPEN") return "open";
+  if (s === "DRAWING") return "drawing";
+  if (s === "COMPLETED") return "settled";
+  if (s === "CANCELED") return "canceled";
+  if (s === "FUNDING_PENDING") return "funding";
+  return "unknown";
 }
 
 export function RaffleCard({ raffle, onOpen }: Props) {
@@ -107,51 +117,8 @@ export function RaffleCard({ raffle, onOpen }: Props) {
 
   function openShare(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
-
-    // auto-close immediately after opening share
     setShareOpen(false);
   }
-
-  const cardStyle: React.CSSProperties = {
-    padding: 12,
-    border: "1px solid #ddd",
-    borderRadius: 12,
-    cursor: "pointer",
-  };
-
-  const topRow: React.CSSProperties = {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 10,
-    alignItems: "baseline",
-  };
-
-  const shareBtn: React.CSSProperties = {
-    border: "1px solid rgba(0,0,0,0.15)",
-    background: "rgba(255,255,255,0.75)",
-    borderRadius: 999,
-    padding: "6px 10px",
-    cursor: "pointer",
-    fontSize: 12,
-    fontWeight: 700,
-  };
-
-  const sharePanel: React.CSSProperties = {
-    marginTop: 10,
-    border: "1px solid rgba(0,0,0,0.10)",
-    background: "rgba(255,255,255,0.60)",
-    borderRadius: 12,
-    padding: 10,
-  };
-
-  const shareRow: React.CSSProperties = {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-    alignItems: "center",
-  };
-
-  const subtle: React.CSSProperties = { fontSize: 12, opacity: 0.8 };
 
   // ---- transparency helpers ----
   const deadlineMs = useMemo(() => {
@@ -170,20 +137,21 @@ export function RaffleCard({ raffle, onOpen }: Props) {
   const statusHint = useMemo(() => {
     if (!deadlinePassed) return null;
 
-    // Deadline passed: explain what users should expect
     if (raffle.status === "OPEN") {
-      return "Deadline passed — finalization is pending on-chain.";
+      return "Deadline passed — finalization is pending.";
     }
     if (raffle.status === "DRAWING") {
-      return "Winner selection is in progress on-chain.";
+      return "Winner selection is in progress.";
     }
     return null;
   }, [deadlinePassed, raffle.status]);
 
+  const tone = statusTone(raffle.status);
+  const max = raffle.maxTickets !== "0" ? raffle.maxTickets : null;
+
   return (
     <div
-      key={raffle.id}
-      style={cardStyle}
+      className={`pp-ticket pp-ticket--${tone}`}
       role="button"
       tabIndex={0}
       onClick={() => onOpen(raffle.id)}
@@ -192,12 +160,18 @@ export function RaffleCard({ raffle, onOpen }: Props) {
       }}
       title="Open raffle"
     >
-      <div style={topRow}>
-        <div style={{ fontWeight: 800 }}>{raffle.name}</div>
+      {/* Top row */}
+      <div className="pp-ticket__top">
+        <div className="pp-ticket__titleWrap">
+          <div className="pp-ticket__title">{raffle.name}</div>
+          <div className={`pp-stamp pp-stamp--${tone}`} aria-label={`Status: ${displayStatus}`}>
+            {displayStatus}
+          </div>
+        </div>
 
         {/* Share toggle (must NOT open modal) */}
         <button
-          style={shareBtn}
+          className="pp-pillBtn"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -210,40 +184,54 @@ export function RaffleCard({ raffle, onOpen }: Props) {
         </button>
       </div>
 
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Win: {fmtUsdc(raffle.winningPot)} USDC • Ticket: {fmtUsdc(raffle.ticketPrice)} USDC
-      </div>
-
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Joined: {raffle.sold}
-        {raffle.maxTickets !== "0" ? ` / ${raffle.maxTickets}` : ""}
-      </div>
-
-      {/* ✅ live countdown */}
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        {formatEndsIn(raffle.deadline, nowMs)}
-      </div>
-
-      {/* ✅ clearer status */}
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Status: <b>{displayStatus}</b>
-      </div>
-
-      {/* ✅ small “why” hint when deadline passed but UI might feel confusing */}
-      {statusHint && (
-        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-          {statusHint}
+      {/* Main facts */}
+      <div className="pp-ticket__facts">
+        <div className="pp-fact">
+          <div className="pp-fact__label">Prize</div>
+          <div className="pp-fact__value">{fmtUsdc(raffle.winningPot)} USDC</div>
         </div>
-      )}
 
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
-        Ppopgi fee: {raffle.protocolFeePercent}%
+        <div className="pp-fact">
+          <div className="pp-fact__label">Ticket</div>
+          <div className="pp-fact__value">{fmtUsdc(raffle.ticketPrice)} USDC</div>
+        </div>
+
+        <div className="pp-fact">
+          <div className="pp-fact__label">Joined</div>
+          <div className="pp-fact__value">
+            {raffle.sold}
+            {max ? ` / ${max}` : ""}
+          </div>
+        </div>
+
+        <div className="pp-fact">
+          <div className="pp-fact__label">Time</div>
+          <div className="pp-fact__value">{formatEndsIn(raffle.deadline, nowMs)}</div>
+        </div>
+      </div>
+
+      {/* small hint when deadline passed */}
+      {statusHint && <div className="pp-hint">{statusHint}</div>}
+
+      {/* Tear line */}
+      <div className="pp-tear" aria-hidden="true" />
+
+      {/* Footer */}
+      <div className="pp-ticket__footer">
+        <div className="pp-footerLine">
+          <span className="pp-muted">Ppopgi fee</span>
+          <span className="pp-strong">{raffle.protocolFeePercent}%</span>
+        </div>
+
+        <div className="pp-footerHint">
+          Link format: <span className="pp-mono">?raffle=0x…</span>
+        </div>
       </div>
 
       {/* Share panel */}
       {shareOpen && (
         <div
-          style={sharePanel}
+          className="pp-sharePanel"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -252,11 +240,11 @@ export function RaffleCard({ raffle, onOpen }: Props) {
           role="group"
           aria-label="Share raffle"
         >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-            <div style={subtle}>Share this raffle</div>
+          <div className="pp-shareHeader">
+            <div className="pp-muted">Share this raffle</div>
 
             <button
-              style={shareBtn}
+              className="pp-pillBtn"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -268,9 +256,9 @@ export function RaffleCard({ raffle, onOpen }: Props) {
             </button>
           </div>
 
-          <div style={{ marginTop: 10, ...shareRow }}>
+          <div className="pp-shareRow">
             <button
-              style={shareBtn}
+              className="pp-pillBtn"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -282,7 +270,7 @@ export function RaffleCard({ raffle, onOpen }: Props) {
             </button>
 
             <button
-              style={shareBtn}
+              className="pp-pillBtn"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -294,7 +282,7 @@ export function RaffleCard({ raffle, onOpen }: Props) {
             </button>
 
             <button
-              style={shareBtn}
+              className="pp-pillBtn"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -306,7 +294,7 @@ export function RaffleCard({ raffle, onOpen }: Props) {
             </button>
 
             <button
-              style={shareBtn}
+              className="pp-pillBtn"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -318,7 +306,7 @@ export function RaffleCard({ raffle, onOpen }: Props) {
             </button>
 
             <button
-              style={shareBtn}
+              className="pp-pillBtn"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -330,11 +318,7 @@ export function RaffleCard({ raffle, onOpen }: Props) {
             </button>
           </div>
 
-          {copyMsg && <div style={{ marginTop: 8, ...subtle }}>{copyMsg}</div>}
-
-          <div style={{ marginTop: 8, ...subtle }}>
-            Link format is always: <span style={{ fontWeight: 700 }}>?raffle=0x…</span>
-          </div>
+          {copyMsg && <div className="pp-shareMsg">{copyMsg}</div>}
         </div>
       )}
     </div>
