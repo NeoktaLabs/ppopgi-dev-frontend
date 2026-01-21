@@ -6,12 +6,16 @@ import { fetchRafflesOnChainFallback } from "../onchain/fallbackRaffles";
 
 type Mode = "indexer" | "live";
 
+function numOr0(v?: string | null) {
+  const n = Number(v || "0");
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function useHomeRaffles() {
   const [items, setItems] = useState<RaffleListItem[] | null>(null);
   const [mode, setMode] = useState<Mode>("indexer");
   const [note, setNote] = useState<string | null>(null);
 
-  // ✅ allows App to trigger reload
   const [refreshKey, setRefreshKey] = useState(0);
   const refetch = useCallback(() => setRefreshKey((x) => x + 1), []);
 
@@ -20,7 +24,6 @@ export function useHomeRaffles() {
     const controller = new AbortController();
 
     (async () => {
-      // reset state for a clean refetch UX
       setNote(null);
 
       // 1) indexer-first (with timeout)
@@ -59,12 +62,13 @@ export function useHomeRaffles() {
       alive = false;
       controller.abort();
     };
-  }, [refreshKey]); // ✅ refetch triggers this
+  }, [refreshKey]);
+
+  const all = useMemo(() => items ?? [], [items]);
 
   const active = useMemo(() => {
-    const all = items ?? [];
     return all.filter((r) => r.status === "OPEN" || r.status === "FUNDING_PENDING");
-  }, [items]);
+  }, [all]);
 
   // ✅ Big prizes: top 3 active by winningPot (descending)
   const bigPrizes = useMemo(() => {
@@ -73,7 +77,7 @@ export function useHomeRaffles() {
         const A = BigInt(a.winningPot || "0");
         const B = BigInt(b.winningPot || "0");
         if (A === B) return 0;
-        return A > B ? -1 : 1; // descending
+        return A > B ? -1 : 1;
       })
       .slice(0, 3);
   }, [active]);
@@ -82,13 +86,25 @@ export function useHomeRaffles() {
   const endingSoon = useMemo(() => {
     return [...active]
       .filter((r) => r.status === "OPEN")
-      .sort((a, b) => {
-        const A = Number(a.deadline || "0");
-        const B = Number(b.deadline || "0");
-        return A - B;
-      })
+      .sort((a, b) => numOr0(a.deadline) - numOr0(b.deadline))
       .slice(0, 5);
   }, [active]);
 
-  return { items, bigPrizes, endingSoon, mode, note, refetch };
+  // ✅ Recently finalized/settled: top 5 COMPLETED by completedAt (fallback to finalizedAt)
+  const recentlyFinalized = useMemo(() => {
+    // In live fallback mode, these timestamps might not exist → return empty list (calm degradation).
+    if (mode === "live") return [];
+
+    const settled = all.filter((r) => r.status === "COMPLETED");
+
+    return [...settled]
+      .sort((a, b) => {
+        const aKey = numOr0(a.completedAt) || numOr0(a.finalizedAt) || numOr0(a.lastUpdatedTimestamp);
+        const bKey = numOr0(b.completedAt) || numOr0(b.finalizedAt) || numOr0(b.lastUpdatedTimestamp);
+        return bKey - aKey; // newest first
+      })
+      .slice(0, 5);
+  }, [all, mode]);
+
+  return { items, bigPrizes, endingSoon, recentlyFinalized, mode, note, refetch };
 }
