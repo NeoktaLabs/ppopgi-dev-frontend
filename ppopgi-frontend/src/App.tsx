@@ -187,27 +187,40 @@ export default function App() {
     border: "1px solid rgba(0,0,0,0.28)",
   };
 
-  // ✅ Sections: strong demarcation but still shows your background through
+  // ✅ “Glass border” section: keeps your background visible
   const sectionCard: React.CSSProperties = {
     marginTop: 18,
     padding: 16,
-    borderRadius: 22,
+    borderRadius: 24,
     position: "relative",
     overflow: "hidden",
 
-    // See-through but NOT “washed out”
-    background: "rgba(255, 247, 251, 0.78)",
-    backdropFilter: "blur(10px)",
+    // no opaque fill – only a tiny tint
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))," +
+      "radial-gradient(900px 240px at 10% 0%, rgba(255,141,187,0.10), rgba(255,141,187,0) 55%)," +
+      "radial-gradient(900px 240px at 90% 0%, rgba(203,183,246,0.10), rgba(203,183,246,0) 55%)",
 
-    border: "2px solid rgba(242, 166, 198, 0.95)",
-    boxShadow: "0 14px 30px rgba(0,0,0,0.14), inset 0 0 0 2px rgba(255,255,255,0.55)",
+    backdropFilter: "blur(7px)",
+
+    border: "2px solid rgba(255,255,255,0.55)",
+    boxShadow: "0 18px 40px rgba(0,0,0,0.16)",
+  };
+
+  // inner stroke for crisp demarcation
+  const sectionInnerStroke: React.CSSProperties = {
+    position: "absolute",
+    inset: 6,
+    borderRadius: 20,
+    pointerEvents: "none",
+    border: "1px solid rgba(242,166,198,0.55)",
   };
 
   const sectionAccent: React.CSSProperties = {
     position: "absolute",
-    top: 10,
-    bottom: 10,
-    left: 10,
+    top: 12,
+    bottom: 12,
+    left: 12,
     width: 6,
     borderRadius: 999,
     background: "linear-gradient(180deg, #FF8DBB, #CBB7F6, #FFD89A)",
@@ -220,7 +233,7 @@ export default function App() {
     justifyContent: "space-between",
     gap: 12,
     flexWrap: "wrap",
-    paddingLeft: 16, // space from accent stripe
+    paddingLeft: 18, // from accent stripe
   };
 
   const sectionTitlePill: React.CSSProperties = {
@@ -232,7 +245,8 @@ export default function App() {
     fontWeight: 1000 as any,
     fontSize: 16,
     letterSpacing: 0.25,
-    background: "rgba(255,255,255,0.92)",
+
+    background: "rgba(255,255,255,0.88)",
     border: "1px solid rgba(0,0,0,0.10)",
     color: "#4A0F2B",
     boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
@@ -246,10 +260,10 @@ export default function App() {
     boxShadow: "0 6px 12px rgba(0,0,0,0.12)",
   };
 
-  // ✅ single-row (always) list of 5 cards; scrolls on smaller widths
+  // ✅ single-row list of 5 cards; scroll if needed
   const row5: React.CSSProperties = {
     marginTop: 12,
-    paddingLeft: 16, // align with title
+    paddingLeft: 18,
     display: "flex",
     gap: 12,
     overflowX: "auto",
@@ -265,7 +279,6 @@ export default function App() {
   /* ───────────── render helpers ───────────── */
 
   const podium = useMemo(() => {
-    // bigPrizes already = top3 active by prize desc (from hook), but we still map to gold/silver/bronze positions
     const sorted = [...bigPrizes].sort((a, b) => {
       try {
         const A = BigInt(a.winningPot || "0");
@@ -285,23 +298,18 @@ export default function App() {
   }, [bigPrizes]);
 
   const endingSoonSorted = useMemo(() => {
-    // Should remain active only (hook already filters active); keep soonest left
     return [...endingSoon].sort((a, b) => num(a.deadline) - num(b.deadline));
   }, [endingSoon]);
 
   const latestTerminated = useMemo(() => {
     const all = items ?? [];
-
-    // “Latest terminated raffles” = anything NOT active (not OPEN / not FUNDING_PENDING)
     const terminated = all.filter((r) => r.status !== "OPEN" && r.status !== "FUNDING_PENDING");
 
     const sortKey = (r: any) => {
-      // best-effort “most recent” key
-      const finalizedAt = num(r.finalizedAt); // schema has it, your list item may not
+      const finalizedAt = num(r.finalizedAt);
       const completedAt = num(r.completedAt);
       const canceledAt = num(r.canceledAt);
       const updated = num(r.lastUpdatedTimestamp);
-
       return Math.max(finalizedAt, completedAt, canceledAt, updated);
     };
 
@@ -363,6 +371,7 @@ export default function App() {
             <>
               {/* BIG PRIZES */}
               <div style={sectionCard}>
+                <div style={sectionInnerStroke} />
                 <div style={sectionAccent} />
                 <div style={sectionTitleRow}>
                   <div style={sectionTitlePill}>
@@ -375,7 +384,7 @@ export default function App() {
                   className="pp-podium"
                   style={{
                     justifyContent: "center",
-                    paddingLeft: 16,
+                    paddingLeft: 18,
                     marginTop: 12,
                   }}
                 >
@@ -392,13 +401,14 @@ export default function App() {
                   </div>
 
                   {bigPrizes.length === 0 && (
-                    <div style={{ opacity: 0.9, paddingLeft: 16 }}>No active raffles right now.</div>
+                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>No active raffles right now.</div>
                   )}
                 </div>
               </div>
 
               {/* ENDING SOON */}
               <div style={sectionCard}>
+                <div style={sectionInnerStroke} />
                 <div style={sectionAccent} />
                 <div style={sectionTitleRow}>
                   <div style={sectionTitlePill}>
@@ -414,13 +424,14 @@ export default function App() {
                     </div>
                   ))}
                   {endingSoonSorted.length === 0 && (
-                    <div style={{ opacity: 0.9, paddingLeft: 16 }}>Nothing is ending soon.</div>
+                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>Nothing is ending soon.</div>
                   )}
                 </div>
               </div>
 
               {/* LATEST TERMINATED */}
               <div style={sectionCard}>
+                <div style={sectionInnerStroke} />
                 <div style={sectionAccent} />
                 <div style={sectionTitleRow}>
                   <div style={sectionTitlePill}>
@@ -436,7 +447,7 @@ export default function App() {
                     </div>
                   ))}
                   {latestTerminated.length === 0 && (
-                    <div style={{ opacity: 0.9, paddingLeft: 16 }}>No terminated raffles to show yet.</div>
+                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>No terminated raffles to show yet.</div>
                   )}
                 </div>
               </div>
