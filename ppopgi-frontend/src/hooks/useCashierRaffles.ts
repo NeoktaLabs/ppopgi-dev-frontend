@@ -1,4 +1,4 @@
-// src/hooks/useCashierRaffles.ts
+// src/hooks/useClaimableRaffles.ts
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { getContract, readContract } from "thirdweb";
@@ -15,7 +15,7 @@ function normAddr(a: string) {
   return a.trim().toLowerCase();
 }
 
-export type CashierRaffleItem = {
+export type ClaimableRaffleItem = {
   raffle: RaffleListItem;
   roles: { created: boolean; participated: boolean };
 
@@ -27,8 +27,8 @@ export type CashierRaffleItem = {
 
 type Mode = "indexer" | "empty";
 
-export function useCashierRaffles(userAddress: string | null, limit = 200) {
-  const [items, setItems] = useState<CashierRaffleItem[] | null>(null);
+export function useClaimableRaffles(userAddress: string | null, limit = 200) {
+  const [items, setItems] = useState<ClaimableRaffleItem[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("indexer");
 
@@ -48,10 +48,8 @@ export function useCashierRaffles(userAddress: string | null, limit = 200) {
       const user = me; // string lowercased
 
       // We query created raffles + participated raffles via events.
-      // (creator exists in your schema; even if your existing RaffleListItem type doesn’t include it,
-      // we treat it as "any" and keep the rest stable.)
       const query = `
-        query Cashier($user: Bytes!, $first: Int!) {
+        query Claimables($user: Bytes!, $first: Int!) {
           created: raffles(first: $first, where: { creator: $user }) {
             id
             name
@@ -108,10 +106,7 @@ export function useCashierRaffles(userAddress: string | null, limit = 200) {
       const participated = participatedEvents.map((e) => e.raffle).filter(Boolean) as RaffleListItem[];
 
       // Merge + dedupe with roles
-      const byId = new Map<
-        string,
-        { raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }
-      >();
+      const byId = new Map<string, { raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>();
 
       for (const r of created) {
         byId.set(normAddr(r.id), { raffle: r, roles: { created: true, participated: false } });
@@ -141,13 +136,12 @@ export function useCashierRaffles(userAddress: string | null, limit = 200) {
 
     async function enrichOnChain(
       merged: Array<{ raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>
-    ): Promise<CashierRaffleItem[]> {
+    ): Promise<ClaimableRaffleItem[]> {
       if (!me) return [];
 
       // Lightweight on-chain reads for each raffle:
       // claimableFunds(me), claimableNative(me), creator()
-      // Using method strings keeps you independent of ABI imports here.
-      const out: CashierRaffleItem[] = [];
+      const out: ClaimableRaffleItem[] = [];
 
       // small concurrency control (avoid blasting RPC)
       const batchSize = 10;
@@ -189,7 +183,7 @@ export function useCashierRaffles(userAddress: string | null, limit = 200) {
               claimableUsdc: String(claimableUsdc),
               claimableNative: String(claimableNative),
               isCreator,
-            } satisfies CashierRaffleItem;
+            } satisfies ClaimableRaffleItem;
           })
         );
 
@@ -203,7 +197,7 @@ export function useCashierRaffles(userAddress: string | null, limit = 200) {
     (async () => {
       if (!me) {
         setMode("empty");
-        setNote("Sign in to see your cashier.");
+        setNote("Sign in to see your claims.");
         setItems([]);
         return;
       }
@@ -216,7 +210,6 @@ export function useCashierRaffles(userAddress: string | null, limit = 200) {
         const { merged } = await fetchFromSubgraph();
         if (!alive) return;
 
-        // If no relevant raffles, stop early
         if (!merged.length) {
           setItems([]);
           setNote("No raffles found for your address yet.");
@@ -231,7 +224,7 @@ export function useCashierRaffles(userAddress: string | null, limit = 200) {
       } catch {
         if (!alive) return;
         setItems([]);
-        setNote("Could not load your cashier right now. Please refresh.");
+        setNote("Could not load your claims right now. Please refresh.");
       }
     })();
 
@@ -243,3 +236,10 @@ export function useCashierRaffles(userAddress: string | null, limit = 200) {
 
   return { items, note, mode, refetch };
 }
+
+/**
+ * Backwards compatible alias (so existing imports keep working).
+ * You can remove this after you update all imports.
+ */
+export const useCashierRaffles = useClaimableRaffles;
+export type CashierRaffleItem = ClaimableRaffleItem;
