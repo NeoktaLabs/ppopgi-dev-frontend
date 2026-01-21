@@ -91,7 +91,7 @@ export default function App() {
     if (page === "dashboard" && !account) setPage("home");
   }, [page, account]);
 
-  // ✅ we use ALL items to build "terminated" list
+  // ✅ bigPrizes + endingSoon are already derived from ACTIVE in your hook
   const { items, bigPrizes, endingSoon, mode, note: homeNote, refetch } = useHomeRaffles();
 
   function onCreatedRaffle() {
@@ -182,48 +182,71 @@ export default function App() {
     border: "1px solid rgba(0,0,0,0.28)",
   };
 
-  // Section card style (clear demarcation + matches ticket vibe)
+  // ✅ Stronger section delimitation
   const sectionCard: React.CSSProperties = {
     marginTop: 18,
-    padding: 14,
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.14)",
-    backdropFilter: "blur(8px)",
+    padding: 16,
+    borderRadius: 22,
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06))",
+    border: "1px solid rgba(255,255,255,0.22)",
+    boxShadow:
+      "0 18px 44px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.18)",
+    backdropFilter: "blur(10px)",
+    position: "relative",
+    overflow: "hidden",
+  };
+
+  // top accent like a “ticket edge”
+  const sectionAccent: React.CSSProperties = {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 10,
+    background:
+      "linear-gradient(90deg, rgba(255,190,215,0.85), rgba(203,183,246,0.70), rgba(255,216,154,0.65))",
+    opacity: 0.85,
   };
 
   const sectionTitleRow: React.CSSProperties = {
     display: "flex",
-    alignItems: "baseline",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
     flexWrap: "wrap",
-    marginBottom: 10,
+    marginBottom: 12,
   };
 
+  // ✅ More visible title pill
   const sectionTitlePill: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
-    gap: 8,
-    padding: "8px 12px",
+    gap: 10,
+    padding: "10px 14px",
     borderRadius: 999,
-    fontWeight: 950,
-    letterSpacing: 0.2,
-    background: "rgba(255,255,255,0.70)",
-    border: "1px solid rgba(0,0,0,0.08)",
+    fontWeight: 1000 as any,
+    fontSize: 15,
+    letterSpacing: 0.25,
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.72))",
+    border: "1px solid rgba(0,0,0,0.10)",
     color: "#4A0F2B",
+    boxShadow: "0 14px 28px rgba(0,0,0,0.16)",
   };
 
-  const sectionSub: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 800,
-    opacity: 0.9,
-    color: "rgba(255,255,255,0.88)",
+  const sectionTitleNotch: React.CSSProperties = {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    background: "rgba(255,190,215,0.95)",
+    boxShadow: "0 6px 14px rgba(0,0,0,0.14)",
+    border: "1px solid rgba(0,0,0,0.06)",
   };
 
   /* ───────────── render helpers ───────────── */
 
-  // ✅ ensure podium uses exactly 3 (already top 3 from hook), but map to gold/silver/bronze positions
+  // Podium (top 3 active by prize) — already active-derived
   const podium = useMemo(() => {
     const top3 = [...(bigPrizes ?? [])].slice(0, 3);
     return {
@@ -233,15 +256,14 @@ export default function App() {
     };
   }, [bigPrizes]);
 
-  // ✅ Ending soon: keep 5, sorted soonest deadline on the left
+  // Ending soon (top 5 OPEN by deadline asc) — already active-derived, keep sorted for safety
   const endingSoonSorted = useMemo(() => {
     return [...(endingSoon ?? [])]
       .sort((a, b) => Number(a.deadline || "0") - Number(b.deadline || "0"))
       .slice(0, 5);
   }, [endingSoon]);
 
-  // ✅ Latest terminated: anything NOT OPEN (includes FUNDING_PENDING, DRAWING, COMPLETED, CANCELED)
-  // Sorted by best available "recent activity/finalization" time desc
+  // Latest terminated = ANY not OPEN (canceled / completed / drawing / funding_pending etc.)
   const latestTerminated = useMemo(() => {
     const all = items ?? [];
 
@@ -304,21 +326,23 @@ export default function App() {
           </div>
 
           {page === "home" && homeNote && (
-            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.88 }}>{homeNote}</div>
+            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>{homeNote}</div>
           )}
           {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{createdHint}</div>}
 
           {/* HOME */}
           {page === "home" && (
             <>
-              {/* BIG PRIZES */}
+              {/* BIG PRIZES (ACTIVE ONLY) */}
               <div style={sectionCard}>
+                <div style={sectionAccent} />
                 <div style={sectionTitleRow}>
-                  <div style={sectionTitlePill}>🏆 Big prizes right now</div>
-                  <div style={sectionSub}>Top 3 active raffles (by prize)</div>
+                  <div style={sectionTitlePill}>
+                    <span style={sectionTitleNotch} />
+                    🏆 Big prizes right now
+                  </div>
                 </div>
 
-                {/* ✅ center the 3 podium cards */}
                 <div className="pp-podium" style={{ justifyContent: "center" }}>
                   <div className="pp-podium__silver">
                     {podium.silver ? <RaffleCard raffle={podium.silver} onOpen={openRaffle} ribbon="silver" /> : null}
@@ -332,31 +356,35 @@ export default function App() {
                     {podium.bronze ? <RaffleCard raffle={podium.bronze} onOpen={openRaffle} ribbon="bronze" /> : null}
                   </div>
 
-                  {(bigPrizes?.length ?? 0) === 0 && <div style={{ opacity: 0.85 }}>No open raffles right now.</div>}
+                  {(bigPrizes?.length ?? 0) === 0 && <div style={{ opacity: 0.9 }}>No open raffles right now.</div>}
                 </div>
               </div>
 
-              {/* ENDING SOON */}
+              {/* ENDING SOON (ACTIVE ONLY) */}
               <div style={sectionCard}>
+                <div style={sectionAccent} />
                 <div style={sectionTitleRow}>
-                  <div style={sectionTitlePill}>⏳ Ending soon</div>
-                  <div style={sectionSub}>Soonest deadline first • 5 max</div>
+                  <div style={sectionTitlePill}>
+                    <span style={sectionTitleNotch} />
+                    ⏳ Ending soon
+                  </div>
                 </div>
 
                 <div className="pp-rowTickets">
                   {endingSoonSorted.map((r) => (
                     <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
                   ))}
-                  {endingSoonSorted.length === 0 && <div style={{ opacity: 0.85 }}>Nothing is ending soon.</div>}
+                  {endingSoonSorted.length === 0 && <div style={{ opacity: 0.9 }}>Nothing is ending soon.</div>}
                 </div>
               </div>
 
-              {/* LATEST TERMINATED */}
+              {/* LATEST TERMINATED (NOT OPEN) */}
               <div style={sectionCard}>
+                <div style={sectionAccent} />
                 <div style={sectionTitleRow}>
-                  <div style={sectionTitlePill}>🧾 Latest terminated raffles</div>
-                  <div style={sectionSub}>
-                    Not open • most recently updated • 5 max{mode === "live" ? " • limited in live mode" : ""}
+                  <div style={sectionTitlePill}>
+                    <span style={sectionTitleNotch} />
+                    🧾 Latest terminated raffles
                   </div>
                 </div>
 
@@ -366,10 +394,8 @@ export default function App() {
                   ))}
 
                   {latestTerminated.length === 0 && (
-                    <div style={{ opacity: 0.85 }}>
-                      {mode === "live"
-                        ? "Live mode may not include past raffles yet."
-                        : "No terminated raffles found yet."}
+                    <div style={{ opacity: 0.9 }}>
+                      {mode === "live" ? "Live mode may not include past raffles yet." : "No terminated raffles found yet."}
                     </div>
                   )}
                 </div>
