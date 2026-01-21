@@ -30,7 +30,7 @@ function fmtNative(raw: string) {
   }
 }
 
-// ✅ Minimal ABI so thirdweb can type prepareContractCall (otherwise it becomes `never`)
+// ✅ Minimal ABI so thirdweb can type prepareContractCall
 const RAFFLE_MIN_ABI = [
   {
     type: "function",
@@ -55,7 +55,8 @@ const RAFFLE_MIN_ABI = [
   },
 ] as const;
 
-type MethodSig = "function withdrawFunds()" | "function withdrawNative()" | "function claimTicketRefund()";
+// ✅ With ABI present, thirdweb expects method NAME (not "function ...()")
+type MethodName = "withdrawFunds" | "withdrawNative" | "claimTicketRefund";
 
 export function DashboardPage({ account, onOpenRaffle }: Props) {
   const { items, note, refetch } = useClaimableRaffles(account, 250);
@@ -111,7 +112,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
     cursor: "not-allowed",
   };
 
-  async function callRaffleTx(raffleId: string, method: MethodSig) {
+  async function callRaffleTx(raffleId: string, method: MethodName) {
     setMsg(null);
 
     if (!account) {
@@ -129,7 +130,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
 
       const tx = prepareContractCall({
         contract: raffleContract,
-        method,
+        method, // ✅ now a method name
         params: [] as const,
       });
 
@@ -183,7 +184,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
             <button
               style={hasUsdc && !isPending ? actionBtn : actionBtnDisabled}
               disabled={!hasUsdc || isPending}
-              onClick={() => callRaffleTx(raffle.id, "function withdrawFunds()")}
+              onClick={() => callRaffleTx(raffle.id, "withdrawFunds")}
               title="Withdraw your claimable USDC (if available)"
             >
               {isPending ? "Confirming…" : "Withdraw USDC"}
@@ -192,7 +193,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
             <button
               style={hasNative && !isPending ? actionBtn : actionBtnDisabled}
               disabled={!hasNative || isPending}
-              onClick={() => callRaffleTx(raffle.id, "function withdrawNative()")}
+              onClick={() => callRaffleTx(raffle.id, "withdrawNative")}
               title="Withdraw your claimable native (if available)"
             >
               {isPending ? "Confirming…" : "Withdraw native"}
@@ -203,7 +204,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
             <button
               style={!isPending ? actionBtn : actionBtnDisabled}
               disabled={isPending}
-              onClick={() => callRaffleTx(raffle.id, "function claimTicketRefund()")}
+              onClick={() => callRaffleTx(raffle.id, "claimTicketRefund")}
               title="Claim a ticket refund if the contract says you have one"
             >
               {isPending ? "Confirming…" : "Claim ticket refund"}
