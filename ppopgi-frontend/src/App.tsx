@@ -13,7 +13,7 @@ import { ExplorePage } from "./pages/ExplorePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
 
-// ✅ Random backgrounds (picked once per page load)
+// ✅ Random backgrounds
 import bg1 from "./assets/backgrounds/bg1.webp";
 import bg2 from "./assets/backgrounds/bg2.webp";
 import bg3 from "./assets/backgrounds/bg3.webp";
@@ -91,7 +91,7 @@ export default function App() {
     if (page === "dashboard" && !account) setPage("home");
   }, [page, account]);
 
-  const { bigPrizes, endingSoon, note: homeNote, refetch } = useHomeRaffles();
+  const { bigPrizes, endingSoon, recentlyFinalized, note: homeNote, refetch, mode } = useHomeRaffles();
 
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear.");
@@ -181,32 +181,69 @@ export default function App() {
     border: "1px solid rgba(0,0,0,0.28)",
   };
 
-  const sectionWrap: React.CSSProperties = { marginTop: 18 };
+  const sectionCard: React.CSSProperties = {
+    marginTop: 18,
+    padding: "16px 16px 14px",
+    borderRadius: 22,
+    background: "rgba(255,255,255,0.20)",
+    border: "1px solid rgba(255,255,255,0.55)",
+    backdropFilter: "blur(12px)",
+    boxShadow: "0 16px 34px rgba(0,0,0,0.10)",
+  };
+
+  const sectionTitleRow: React.CSSProperties = {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+  };
+
+  const sectionTitle: React.CSSProperties = {
+    margin: 0,
+    fontSize: 18,
+    fontWeight: 950,
+    letterSpacing: 0.2,
+    color: "#4A0F2B",
+    textShadow: "0 1px 0 rgba(255,255,255,0.35)",
+  };
+
+  const sectionSub: React.CSSProperties = {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: 800,
+    opacity: 0.9,
+    color: "#5C1F3B",
+  };
+
+  const smallBadge: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 900,
+    padding: "6px 10px",
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.60)",
+    border: "1px solid rgba(255,255,255,0.65)",
+    color: "#4A0F2B",
+    whiteSpace: "nowrap",
+  };
 
   /* ───────────── render helpers ───────────── */
 
   const podium = useMemo(() => {
-    // Sort by winningPot descending (BigInt safe)
     const sorted = [...bigPrizes].sort((a, b) => {
       try {
         const A = BigInt(a.winningPot || "0");
         const B = BigInt(b.winningPot || "0");
-        return A === B ? 0 : A < B ? 1 : -1; // desc
+        return A === B ? 0 : A < B ? 1 : -1;
       } catch {
         return 0;
       }
     });
-
     const top3 = sorted.slice(0, 3);
-    return {
-      gold: top3[0] || null,
-      silver: top3[1] || null,
-      bronze: top3[2] || null,
-    };
+    return { gold: top3[0] || null, silver: top3[1] || null, bronze: top3[2] || null };
   }, [bigPrizes]);
 
   const endingSoonSorted = useMemo(() => {
-    // Soonest deadline on the left
     return [...endingSoon].sort((a, b) => Number(a.deadline || "0") - Number(b.deadline || "0"));
   }, [endingSoon]);
 
@@ -255,27 +292,27 @@ export default function App() {
             </div>
           </div>
 
-          {page === "home" && homeNote && (
-            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.88 }}>{homeNote}</div>
-          )}
+          {page === "home" && homeNote && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.88 }}>{homeNote}</div>}
           {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{createdHint}</div>}
 
           {/* HOME */}
           {page === "home" && (
             <>
-              <div style={sectionWrap}>
-                <h3 style={{ margin: 0 }}>Big prizes right now</h3>
+              {/* Big prizes */}
+              <div style={sectionCard}>
+                <div style={sectionTitleRow}>
+                  <h3 style={sectionTitle}>Big prizes right now</h3>
+                  <span style={smallBadge}>{mode === "live" ? "Live data" : "Fast view"}</span>
+                </div>
+                <div style={sectionSub}>Top prizes on Etherlink right now.</div>
 
-                {/* Podium: silver left, gold middle raised, bronze right */}
-                <div className="pp-podium">
+                <div className="pp-podium" style={{ marginTop: 12 }}>
                   <div className="pp-podium__silver">
                     {podium.silver ? <RaffleCard raffle={podium.silver} onOpen={openRaffle} ribbon="silver" /> : null}
                   </div>
-
                   <div className="pp-podium__gold">
                     {podium.gold ? <RaffleCard raffle={podium.gold} onOpen={openRaffle} ribbon="gold" /> : null}
                   </div>
-
                   <div className="pp-podium__bronze">
                     {podium.bronze ? <RaffleCard raffle={podium.bronze} onOpen={openRaffle} ribbon="bronze" /> : null}
                   </div>
@@ -284,15 +321,39 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ marginTop: 22 }}>
-                <h3 style={{ margin: 0 }}>Ending soon</h3>
+              {/* Ending soon */}
+              <div style={sectionCard}>
+                <div style={sectionTitleRow}>
+                  <h3 style={sectionTitle}>Ending soon</h3>
+                  <span style={smallBadge}>Soonest on the left</span>
+                </div>
+                <div style={sectionSub}>The ones closest to closing (left → right).</div>
 
-                {/* Tickets next to each other, soonest on the left */}
-                <div className="pp-rowTickets">
+                <div className="pp-rowTickets" style={{ marginTop: 12 }}>
                   {endingSoonSorted.map((r) => (
                     <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
                   ))}
                   {endingSoonSorted.length === 0 && <div style={{ opacity: 0.85 }}>Nothing is ending soon.</div>}
+                </div>
+              </div>
+
+              {/* Recently finalized */}
+              <div style={sectionCard}>
+                <div style={sectionTitleRow}>
+                  <h3 style={sectionTitle}>Recently finalized</h3>
+                  {mode === "live" ? <span style={smallBadge}>Not available in live mode</span> : null}
+                </div>
+                <div style={sectionSub}>Most recent on the left.</div>
+
+                <div className="pp-rowTickets" style={{ marginTop: 12 }}>
+                  {recentlyFinalized.map((r) => (
+                    <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+                  ))}
+                  {recentlyFinalized.length === 0 && (
+                    <div style={{ opacity: 0.85 }}>
+                      {mode === "live" ? "This section appears when fast view is available." : "No finalized raffles yet."}
+                    </div>
+                  )}
                 </div>
               </div>
             </>
