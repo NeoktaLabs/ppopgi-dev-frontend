@@ -6,8 +6,6 @@ import { formatUnits } from "ethers";
 type Props = {
   raffle: RaffleListItem;
   onOpen: (id: string) => void;
-
-  // Podium styling (top 3 only)
   ribbon?: "gold" | "silver" | "bronze";
 };
 
@@ -47,10 +45,18 @@ function baseStatusLabel(s: string) {
   return "Unknown";
 }
 
-type DisplayStatus = "Open" | "Finalizing" | "Drawing" | "Settled" | "Canceled" | "Getting ready" | "Unknown";
+type DisplayStatus =
+  | "Open"
+  | "Finalizing"
+  | "Drawing"
+  | "Settled"
+  | "Canceled"
+  | "Getting ready"
+  | "Unknown";
 
 function statusTheme(s: DisplayStatus) {
-  if (s === "Open") return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
+  if (s === "Open")
+    return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
   if (s === "Finalizing")
     return { bg: "rgba(255, 120, 140, 0.92)", fg: "#5A0012", border: "1px solid rgba(0,0,0,0.10)", pulse: true };
   if (s === "Drawing")
@@ -64,13 +70,12 @@ function statusTheme(s: DisplayStatus) {
   return { bg: "rgba(255,255,255,0.72)", fg: "#5C2A3E", border: "1px solid rgba(0,0,0,0.08)" };
 }
 
-// Shiny podium “foil” backgrounds (only for top 3 cards)
 function podiumFoil(kind: "gold" | "silver" | "bronze") {
   if (kind === "gold") {
     return {
       bg:
-        "radial-gradient(900px 280px at 20% 20%, rgba(255,255,255,0.85), rgba(255,255,255,0) 55%)," +
-        "radial-gradient(700px 240px at 80% 25%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)," +
+        "radial-gradient(900px 260px at 20% 15%, rgba(255,255,255,0.85), rgba(255,255,255,0) 55%)," +
+        "radial-gradient(700px 220px at 80% 18%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)," +
         "linear-gradient(135deg, rgba(255,216,154,0.98), rgba(255,190,120,0.90) 40%, rgba(255,232,190,0.92))",
       ink: "#4A2A00",
       inkStrong: "#3A1F00",
@@ -80,19 +85,18 @@ function podiumFoil(kind: "gold" | "silver" | "bronze") {
   if (kind === "silver") {
     return {
       bg:
-        "radial-gradient(900px 280px at 20% 20%, rgba(255,255,255,0.85), rgba(255,255,255,0) 55%)," +
-        "radial-gradient(700px 240px at 80% 25%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)," +
+        "radial-gradient(900px 260px at 20% 15%, rgba(255,255,255,0.85), rgba(255,255,255,0) 55%)," +
+        "radial-gradient(700px 220px at 80% 18%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)," +
         "linear-gradient(135deg, rgba(236,241,250,0.98), rgba(218,226,238,0.92) 45%, rgba(245,248,255,0.92))",
       ink: "#1F2A3A",
       inkStrong: "#121B29",
       tear: "rgba(40,60,90,0.40)",
     };
   }
-  // bronze
   return {
     bg:
-      "radial-gradient(900px 280px at 20% 20%, rgba(255,255,255,0.82), rgba(255,255,255,0) 55%)," +
-      "radial-gradient(700px 240px at 80% 25%, rgba(255,255,255,0.52), rgba(255,255,255,0) 60%)," +
+      "radial-gradient(900px 260px at 20% 15%, rgba(255,255,255,0.82), rgba(255,255,255,0) 55%)," +
+      "radial-gradient(700px 220px at 80% 18%, rgba(255,255,255,0.52), rgba(255,255,255,0) 60%)," +
       "linear-gradient(135deg, rgba(246,182,200,0.98), rgba(206,130,105,0.92) 45%, rgba(255,220,205,0.92))",
     ink: "#4A1A12",
     inkStrong: "#35110B",
@@ -121,17 +125,18 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   async function onShareCopy(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setCopyMsg("Link copied.");
+      setCopyMsg("Link copied");
     } catch {
       window.prompt("Copy this link:", shareUrl);
-      setCopyMsg("Copy the link.");
+      setCopyMsg("Copy the link");
     }
-    window.setTimeout(() => setCopyMsg(null), 1100);
+
+    window.setTimeout(() => setCopyMsg(null), 1200);
   }
 
-  // one user-facing status
   const deadlineMs = useMemo(() => {
     const n = Number(raffle.deadline);
     return Number.isFinite(n) ? n * 1000 : 0;
@@ -144,11 +149,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     return baseStatusLabel(raffle.status) as DisplayStatus;
   }, [raffle.status, deadlinePassed]);
 
-  // “bottom line” should be short and friendly
   const bottomLine = useMemo(() => {
-    if (displayStatus === "Open" || displayStatus === "Getting ready") return formatEndsIn(raffle.deadline, nowMs);
-    if (displayStatus === "Finalizing") return "Draw in progress";
-    if (displayStatus === "Drawing") return "Draw in progress";
+    if (displayStatus === "Open" || displayStatus === "Getting ready") return `Ends in ${formatEndsIn(raffle.deadline, nowMs)}`;
+    if (displayStatus === "Finalizing" || displayStatus === "Drawing") return "Draw in progress";
     if (displayStatus === "Settled") return "Settled";
     if (displayStatus === "Canceled") return "Canceled";
     return "Unknown";
@@ -156,7 +159,6 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
 
   const soldNum = useMemo(() => Number(raffle.sold || "0") || 0, [raffle.sold]);
   const maxNum = useMemo(() => Number(raffle.maxTickets || "0") || 0, [raffle.maxTickets]);
-
   const soldLine = useMemo(() => (maxNum > 0 ? `${soldNum} / ${maxNum}` : `${soldNum}`), [soldNum, maxNum]);
 
   const soldPct = useMemo(() => {
@@ -177,7 +179,6 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     return String(maxNum);
   }, [maxNum]);
 
-  // style palette
   const baseInk = "#5C1F3B";
   const baseInkStrong = "#4A0F2B";
   const foil = ribbon ? podiumFoil(ribbon) : null;
@@ -187,24 +188,25 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
 
   const status = statusTheme(displayStatus);
 
+  // ✅ ~30% smaller overall
   const card: React.CSSProperties = {
     position: "relative",
     width: "100%",
-    maxWidth: 340,
-    borderRadius: 22,
-    padding: 16,
+    maxWidth: 240,
+    borderRadius: 20,
+    padding: 12,
     cursor: "pointer",
     userSelect: "none",
     overflow: "hidden",
 
     background:
       foil?.bg ??
-      "linear-gradient(180deg, rgba(255,190,215,0.92), rgba(255,210,230,0.78) 42%, rgba(255,235,246,0.82))",
+      "linear-gradient(180deg, rgba(255,190,215,0.94), rgba(255,210,230,0.82) 42%, rgba(255,235,246,0.86))",
 
-    border: "1px solid rgba(255,255,255,0.78)",
-    boxShadow: isHover ? "0 22px 46px rgba(0,0,0,0.18)" : "0 16px 34px rgba(0,0,0,0.14)",
+    border: "1px solid rgba(255,255,255,0.80)",
+    boxShadow: isHover ? "0 18px 36px rgba(0,0,0,0.16)" : "0 12px 28px rgba(0,0,0,0.13)",
     backdropFilter: "blur(14px)",
-    transform: isHover ? "translateY(-4px)" : "translateY(0)",
+    transform: isHover ? "translateY(-3px)" : "translateY(0)",
     transition: "transform 140ms ease, box-shadow 140ms ease",
   };
 
@@ -212,23 +214,23 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     position: "absolute",
     top: "52%",
     transform: "translateY(-50%)",
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
     borderRadius: 999,
-    background: "rgba(255,255,255,0.62)",
+    background: "rgba(255,255,255,0.66)",
     border: "1px solid rgba(0,0,0,0.06)",
     boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.14)",
     pointerEvents: "none",
   };
 
   const tearLine: React.CSSProperties = {
-    marginTop: 14,
+    marginTop: 10,
     height: 1,
     background:
       "repeating-linear-gradient(90deg, " +
       `${foil?.tear ?? "rgba(180,70,120,0.62)"} , ${foil?.tear ?? "rgba(180,70,120,0.62)"} 7px,` +
       " rgba(0,0,0,0) 7px, rgba(0,0,0,0) 14px)",
-    opacity: 0.8,
+    opacity: 0.82,
     pointerEvents: "none",
   };
 
@@ -236,13 +238,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 8,
   };
 
   const statusChip: React.CSSProperties = {
-    padding: "6px 10px",
+    padding: "5px 9px",
     borderRadius: 999,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 950,
     letterSpacing: 0.35,
     whiteSpace: "nowrap",
@@ -254,31 +256,49 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const shareBtn: React.CSSProperties = {
-    width: 34,
-    height: 34,
+    width: 30,
+    height: 30,
     borderRadius: 12,
-    background: "rgba(255,255,255,0.82)",
+    background: "rgba(255,255,255,0.86)",
     border: "1px solid rgba(0,0,0,0.08)",
     display: "grid",
     placeItems: "center",
     cursor: "pointer",
   };
 
+  const toast: React.CSSProperties = {
+    position: "absolute",
+    top: 10,
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 5,
+    padding: "6px 10px",
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.92)",
+    border: "1px solid rgba(0,0,0,0.10)",
+    boxShadow: "0 14px 26px rgba(0,0,0,0.14)",
+    color: inkStrong,
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: 0.2,
+    pointerEvents: "none",
+  };
+
   const titleWrap: React.CSSProperties = {
-    marginTop: 10,
+    marginTop: 8,
     textAlign: "center",
   };
 
   const smallKicker: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 800,
-    opacity: 0.9,
+    fontSize: 11,
+    fontWeight: 850,
+    opacity: 0.92,
     color: ink,
   };
 
   const titleText: React.CSSProperties = {
     marginTop: 4,
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: 950,
     letterSpacing: 0.1,
     lineHeight: 1.15,
@@ -286,8 +306,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const prizeKicker: React.CSSProperties = {
-    marginTop: 14,
-    fontSize: 12,
+    marginTop: 10,
+    fontSize: 11,
     fontWeight: 950,
     letterSpacing: 0.45,
     textTransform: "uppercase",
@@ -297,8 +317,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const prizeValue: React.CSSProperties = {
-    marginTop: 8,
-    fontSize: 34,
+    marginTop: 6,
+    fontSize: 26,
     fontWeight: 1000 as any,
     lineHeight: 1.0,
     letterSpacing: 0.2,
@@ -308,21 +328,21 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const midGrid: React.CSSProperties = {
-    marginTop: 16,
+    marginTop: 12,
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: 12,
+    gap: 10,
   };
 
   const mini: React.CSSProperties = {
     borderRadius: 14,
-    padding: 12,
-    background: "rgba(255,255,255,0.56)",
+    padding: 10,
+    background: "rgba(255,255,255,0.58)",
     border: "1px solid rgba(0,0,0,0.06)",
   };
 
   const miniLabel: React.CSSProperties = {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 950,
     letterSpacing: 0.25,
     opacity: 0.9,
@@ -330,24 +350,24 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const miniValue: React.CSSProperties = {
-    marginTop: 6,
-    fontSize: 14,
+    marginTop: 5,
+    fontSize: 13,
     fontWeight: 950,
     color: inkStrong,
   };
 
   const hint: React.CSSProperties = {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: 800,
-    opacity: 0.88,
+    marginTop: 3,
+    fontSize: 10.5,
+    fontWeight: 850,
+    opacity: 0.9,
     color: ink,
   };
 
-  const progressWrap: React.CSSProperties = { marginTop: 12 };
+  const progressWrap: React.CSSProperties = { marginTop: 10 };
 
   const progressBar: React.CSSProperties = {
-    height: 10,
+    height: 9,
     borderRadius: 999,
     background: "rgba(0,0,0,0.10)",
     overflow: "hidden",
@@ -361,18 +381,18 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const progressMeta: React.CSSProperties = {
-    marginTop: 10,
+    marginTop: 8,
     display: "flex",
     justifyContent: "space-between",
     gap: 10,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 950,
     color: ink,
   };
 
   const bottomRow: React.CSSProperties = {
-    marginTop: 14,
-    paddingTop: 12,
+    marginTop: 10,
+    paddingTop: 10,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
@@ -380,19 +400,10 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const bottomText: React.CSSProperties = {
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: 950,
     color: inkStrong,
     letterSpacing: 0.2,
-  };
-
-  const copyToast: React.CSSProperties = {
-    marginTop: 10,
-    fontSize: 12,
-    fontWeight: 950,
-    color: ink,
-    opacity: 0.95,
-    textAlign: "center",
   };
 
   return (
@@ -418,15 +429,15 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         `}
       </style>
 
-      {/* Ticket notches */}
-      <div style={{ ...notch, left: -9 }} />
-      <div style={{ ...notch, right: -9 }} />
+      {copyMsg && <div style={toast}>{copyMsg}</div>}
+
+      <div style={{ ...notch, left: -8 }} />
+      <div style={{ ...notch, right: -8 }} />
 
       <div style={topRow}>
         <div style={statusChip}>{displayStatus.toUpperCase()}</div>
 
         <button style={shareBtn} onClick={onShareCopy} title="Copy link" aria-label="Copy link">
-          {/* clean share icon (arrow out of box) */}
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M14 3h7v7" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M21 3l-9 9" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -461,11 +472,11 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         <div style={mini}>
           <div style={miniLabel}>Min tickets</div>
           <div style={miniValue}>{minTickets ?? "—"}</div>
-          <div style={hint}>Must reach this to draw</div>
+          <div style={hint}>Draw is only possible after this is reached</div>
         </div>
       </div>
 
-      <div style={{ ...midGrid, marginTop: 12 }}>
+      <div style={{ ...midGrid, marginTop: 10 }}>
         <div style={mini}>
           <div style={miniLabel}>Tickets</div>
           <div style={miniValue}>{soldLine}</div>
@@ -492,18 +503,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       </div>
 
       <div style={bottomRow}>
-        {/* Remove “ENDS:” for Finalizing/Drawing/Settled/Canceled; show clean bottom line */}
-        <div style={bottomText}>
-          {displayStatus === "Open" || displayStatus === "Getting ready" ? `Ends in ${bottomLine}` : bottomLine}
-        </div>
+        <div style={bottomText}>{bottomLine}</div>
 
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" stroke={inkStrong} strokeWidth="2" opacity="0.8" />
           <path d="M12 7v6l4 2" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
         </svg>
       </div>
-
-      {copyMsg && <div style={copyToast}>{copyMsg}</div>}
     </div>
   );
 }
