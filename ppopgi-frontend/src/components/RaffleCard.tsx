@@ -50,9 +50,15 @@ function baseStatusLabel(s: string) {
 type DisplayStatus = "Open" | "Finalizing" | "Drawing" | "Settled" | "Canceled" | "Getting ready" | "Unknown";
 
 function statusTheme(s: DisplayStatus) {
-  if (s === "Open") return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
+  if (s === "Open")
+    return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
   if (s === "Finalizing")
-    return { bg: "rgba(255, 120, 140, 0.92)", fg: "#5A0012", border: "1px solid rgba(0,0,0,0.10)", pulse: true };
+    return {
+      bg: "rgba(255, 120, 140, 0.92)",
+      fg: "#5A0012",
+      border: "1px solid rgba(0,0,0,0.10)",
+      pulse: true,
+    };
   if (s === "Drawing")
     return { bg: "rgba(203, 183, 246, 0.92)", fg: "#2E1C5C", border: "1px solid rgba(0,0,0,0.08)" };
   if (s === "Settled")
@@ -112,6 +118,16 @@ function toNum(v: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function formatWhen(tsSeconds: string | null | undefined) {
+  const n = Number(tsSeconds || "0");
+  if (!Number.isFinite(n) || n <= 0) return "Unknown time";
+  try {
+    return new Date(n * 1000).toLocaleString();
+  } catch {
+    return "Unknown time";
+  }
+}
+
 export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
@@ -135,12 +151,12 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     e.stopPropagation();
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setCopyMsg("Link copied.");
+      setCopyMsg("Link copied");
     } catch {
       window.prompt("Copy this link:", shareUrl);
-      setCopyMsg("Copy the link.");
+      setCopyMsg("Copy the link");
     }
-    window.setTimeout(() => setCopyMsg(null), 1100);
+    window.setTimeout(() => setCopyMsg(null), 1200);
   }
 
   // one user-facing status
@@ -156,6 +172,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     return baseStatusLabel(raffle.status) as DisplayStatus;
   }, [raffle.status, deadlinePassed]);
 
+  // Whether we should show the live “min/max progress” UI
+  const showProgress = displayStatus === "Open" || displayStatus === "Getting ready";
+
   // “bottom line” should be short and friendly
   const bottomLine = useMemo(() => {
     if (displayStatus === "Open" || displayStatus === "Getting ready") return formatEndsIn(raffle.deadline, nowMs);
@@ -170,7 +189,10 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const anyRaffle = raffle as any;
   const soldN = useMemo(() => toNum(raffle.sold ?? "0"), [raffle.sold]);
   const minN = useMemo(() => toNum(anyRaffle?.minTickets ?? 0), [anyRaffle?.minTickets]);
-  const maxN = useMemo(() => toNum(raffle.maxTickets ?? anyRaffle?.maxTickets ?? "0"), [raffle.maxTickets, anyRaffle?.maxTickets]);
+  const maxN = useMemo(
+    () => toNum(raffle.maxTickets ?? anyRaffle?.maxTickets ?? "0"),
+    [raffle.maxTickets, anyRaffle?.maxTickets]
+  );
 
   const hasMin = minN > 0;
   const hasMax = maxN > 0;
@@ -189,6 +211,28 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     if (!hasMax) return "∞";
     return String(maxN);
   }, [hasMax, maxN]);
+
+  // Past status block (same height as progress)
+  const pastHeadline = useMemo(() => {
+    if (displayStatus === "Settled") return `Settled at ${formatWhen(raffle.completedAt)}`;
+    if (displayStatus === "Canceled") return `Canceled at ${formatWhen(raffle.canceledAt)}`;
+    if (displayStatus === "Drawing") return "Draw in progress";
+    if (displayStatus === "Finalizing") return "Draw in progress";
+    return null;
+  }, [displayStatus, raffle.completedAt, raffle.canceledAt]);
+
+  const pastSubline = useMemo(() => {
+    if (displayStatus === "Settled") {
+      // Per your request: keep it human and short
+      return raffle.winner ? "Someone won!" : "Settled";
+    }
+    if (displayStatus === "Canceled") {
+      const reason = raffle.canceledReason?.trim();
+      return reason ? reason : "Canceled";
+    }
+    if (displayStatus === "Drawing" || displayStatus === "Finalizing") return "Waiting for the result";
+    return null;
+  }, [displayStatus, raffle.winner, raffle.canceledReason]);
 
   // style palette
   const baseInk = "#5C1F3B";
@@ -277,6 +321,24 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     cursor: "pointer",
   };
 
+  // make “link copied” impossible to miss
+  const copyToast: React.CSSProperties = {
+    position: "absolute",
+    top: 54,
+    left: 12,
+    right: 12,
+    padding: "8px 10px",
+    borderRadius: 14,
+    background: "rgba(255,255,255,0.90)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    color: inkStrong,
+    fontSize: 12,
+    fontWeight: 950,
+    textAlign: "center",
+    boxShadow: "0 14px 26px rgba(0,0,0,0.12)",
+    pointerEvents: "none",
+  };
+
   const titleWrap: React.CSSProperties = {
     marginTop: 10,
     textAlign: "center",
@@ -357,8 +419,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     color: ink,
   };
 
-  const barWrap: React.CSSProperties = {
+  // Progress / Past blocks should take the same “slot”
+  const blockSlot: React.CSSProperties = {
     marginTop: 12,
+    minHeight: 86, // ✅ keeps card heights consistent
+  };
+
+  const barWrap: React.CSSProperties = {
     display: "grid",
     gap: 8,
   };
@@ -414,6 +481,30 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     opacity: 0.92,
   };
 
+  const pastBlock: React.CSSProperties = {
+    borderRadius: 14,
+    padding: 12,
+    background: "rgba(255,255,255,0.56)",
+    border: "1px solid rgba(0,0,0,0.06)",
+    display: "grid",
+    gap: 6,
+  };
+
+  const pastLine1: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 950,
+    color: inkStrong,
+    lineHeight: 1.25,
+  };
+
+  const pastLine2: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 900,
+    color: ink,
+    opacity: 0.92,
+    lineHeight: 1.25,
+  };
+
   const bottomRow: React.CSSProperties = {
     marginTop: 14,
     paddingTop: 12,
@@ -428,15 +519,6 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     fontWeight: 950,
     color: inkStrong,
     letterSpacing: 0.2,
-  };
-
-  const copyToast: React.CSSProperties = {
-    marginTop: 10,
-    fontSize: 12,
-    fontWeight: 950,
-    color: ink,
-    opacity: 0.95,
-    textAlign: "center",
   };
 
   return (
@@ -485,6 +567,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         </button>
       </div>
 
+      {copyMsg && <div style={copyToast}>{copyMsg}</div>}
+
       <div style={titleWrap}>
         <div style={smallKicker}>Ppopgi</div>
         <div style={titleText}>{raffle.name}</div>
@@ -508,51 +592,57 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         </div>
       </div>
 
-      {/* ✅ NEW: min/max progress bars */}
-      {hasMin ? (
-        <div style={barWrap}>
-          {!minReached ? (
-            <>
-              <div style={barLabelRow}>
-                <span style={miniLabel}>Minimum needed</span>
-                <span style={smallHint}>
-                  {soldN} / {minN}
-                </span>
-              </div>
-              <div style={barTrack}>
-                <div style={{ ...barFillPending, width: `${Math.round(minProgress * 100)}%` }} />
-              </div>
-              <div style={{ fontSize: 11, opacity: 0.88, color: ink }}>
-                This minimum must be reached before the draw step can happen.
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={barLabelRow}>
-                <span style={miniLabel}>Minimum reached</span>
-                <span style={smallHint}>{soldN} sold</span>
-              </div>
-              <div style={barTrack}>
-                <div style={{ ...barFillMin, width: "100%" }} />
-              </div>
+      {/* ✅ Progress for active only, summary block for past — same slot height */}
+      <div style={blockSlot}>
+        {showProgress && hasMin ? (
+          <div style={barWrap}>
+            {!minReached ? (
+              <>
+                <div style={barLabelRow}>
+                  <span style={miniLabel}>Minimum needed</span>
+                  <span style={smallHint}>
+                    {soldN} / {minN}
+                  </span>
+                </div>
+                <div style={barTrack}>
+                  <div style={{ ...barFillPending, width: `${Math.round(minProgress * 100)}%` }} />
+                </div>
+                <div style={{ fontSize: 11, opacity: 0.88, color: ink }}>
+                  This minimum must be reached before the draw step can happen.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={barLabelRow}>
+                  <span style={miniLabel}>Minimum reached</span>
+                  <span style={smallHint}>{soldN} sold</span>
+                </div>
+                <div style={barTrack}>
+                  <div style={{ ...barFillMin, width: "100%" }} />
+                </div>
 
-              <div style={barLabelRow}>
-                <span style={miniLabel}>Tickets</span>
-                <span style={smallHint}>
-                  {hasMax ? `${soldN} / ${maxN}` : `${soldN} / ∞`}
-                </span>
-              </div>
-              <div style={barTrack}>
-                {hasMax ? (
-                  <div style={{ ...barFillMax, width: `${Math.round(maxProgress * 100)}%` }} />
-                ) : (
-                  <div style={barFillInfinite} />
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      ) : null}
+                <div style={barLabelRow}>
+                  <span style={miniLabel}>Tickets</span>
+                  <span style={smallHint}>{hasMax ? `${soldN} / ${maxN}` : `${soldN} / ∞`}</span>
+                </div>
+                <div style={barTrack}>
+                  {hasMax ? (
+                    <div style={{ ...barFillMax, width: `${Math.round(maxProgress * 100)}%` }} />
+                  ) : (
+                    <div style={barFillInfinite} />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          // Past/drawing/finalizing block
+          <div style={pastBlock}>
+            <div style={pastLine1}>{pastHeadline ?? bottomLine}</div>
+            <div style={pastLine2}>{pastSubline ?? ""}</div>
+          </div>
+        )}
+      </div>
 
       <div style={bottomRow}>
         <div style={bottomText}>
@@ -561,11 +651,16 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
 
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" stroke={inkStrong} strokeWidth="2" opacity="0.8" />
-          <path d="M12 7v6l4 2" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+          <path
+            d="M12 7v6l4 2"
+            stroke={inkStrong}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.85"
+          />
         </svg>
       </div>
-
-      {copyMsg && <div style={copyToast}>{copyMsg}</div>}
     </div>
   );
 }
