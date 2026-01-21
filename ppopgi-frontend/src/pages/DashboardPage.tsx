@@ -30,8 +30,32 @@ function fmtNative(raw: string) {
   }
 }
 
-// ✅ Type-safe method string for thirdweb
-type MethodSig = `function ${string}`;
+// ✅ Minimal ABI so thirdweb can type prepareContractCall (otherwise it becomes `never`)
+const RAFFLE_MIN_ABI = [
+  {
+    type: "function",
+    name: "withdrawFunds",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "withdrawNative",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "claimTicketRefund",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+] as const;
+
+type MethodSig = "function withdrawFunds()" | "function withdrawNative()" | "function claimTicketRefund()";
 
 export function DashboardPage({ account, onOpenRaffle }: Props) {
   const { items, note, refetch } = useClaimableRaffles(account, 250);
@@ -100,12 +124,13 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
         client: thirdwebClient,
         chain: ETHERLINK_CHAIN,
         address: raffleId,
+        abi: RAFFLE_MIN_ABI,
       });
 
       const tx = prepareContractCall({
         contract: raffleContract,
         method,
-        params: [],
+        params: [] as const,
       });
 
       await sendAndConfirm(tx);
@@ -124,14 +149,12 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
     const hasUsdc = BigInt(it.claimableUsdc || "0") > 0n;
     const hasNative = BigInt(it.claimableNative || "0") > 0n;
 
-    // Transparent message
     const statusLine = hasUsdc || hasNative ? "You have funds available to claim." : "Nothing to claim right now.";
 
     return (
       <div key={raffle.id}>
         <RaffleCard raffle={raffle} onOpen={onOpenRaffle} />
 
-        {/* Actions + transparency footer */}
         <div
           style={{
             marginTop: 8,
@@ -176,7 +199,6 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
             </button>
           </div>
 
-          {/* Refund path (participants) — keep available; contract will gate if not eligible */}
           {it.roles.participated && (
             <button
               style={!isPending ? actionBtn : actionBtnDisabled}
