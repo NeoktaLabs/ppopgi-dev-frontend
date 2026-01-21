@@ -11,9 +11,26 @@ type Props = {
   ribbon?: "gold" | "silver" | "bronze";
 };
 
-function fmtUsdc(raw: string) {
+/** ---- number formatting (polish #3) ---- */
+function fmtUsdcSmart(raw: string, mode: "prize" | "ticket" = "ticket") {
   try {
-    return formatUnits(BigInt(raw || "0"), 6);
+    const v = Number(formatUnits(BigInt(raw || "0"), 6));
+    if (!Number.isFinite(v)) return "0";
+
+    if (mode === "prize") {
+      // prize: clean, 0–2 decimals
+      const decimals = v >= 100 ? 0 : v >= 10 ? 1 : 2;
+      return v.toLocaleString(undefined, { maximumFractionDigits: decimals });
+    }
+
+    // ticket: keep precision for small prices, but avoid noise
+    const decimals =
+      v >= 10 ? 2 :
+      v >= 1 ? 3 :
+      v >= 0.1 ? 4 :
+      6;
+
+    return v.toLocaleString(undefined, { maximumFractionDigits: decimals });
   } catch {
     return "0";
   }
@@ -94,7 +111,6 @@ function podiumFoil(kind: "gold" | "silver" | "bronze") {
       tear: "rgba(40,60,90,0.40)",
     };
   }
-  // bronze
   return {
     bg:
       "radial-gradient(900px 280px at 20% 20%, rgba(255,255,255,0.82), rgba(255,255,255,0) 55%)," +
@@ -106,7 +122,6 @@ function podiumFoil(kind: "gold" | "silver" | "bronze") {
   };
 }
 
-// helpers for progress
 function clamp01(x: number) {
   if (!Number.isFinite(x)) return 0;
   if (x < 0) return 0;
@@ -156,10 +171,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       window.prompt("Copy this link:", shareUrl);
       setCopyMsg("Copy the link");
     }
-    window.setTimeout(() => setCopyMsg(null), 1200);
+    window.setTimeout(() => setCopyMsg(null), 900);
   }
 
-  // one user-facing status
   const deadlineMs = useMemo(() => {
     const n = Number(raffle.deadline);
     return Number.isFinite(n) ? n * 1000 : 0;
@@ -172,10 +186,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     return baseStatusLabel(raffle.status) as DisplayStatus;
   }, [raffle.status, deadlinePassed]);
 
-  // Whether we should show the live “min/max progress” UI
   const showProgress = displayStatus === "Open" || displayStatus === "Getting ready";
 
-  // “bottom line” should be short and friendly
   const bottomLine = useMemo(() => {
     if (displayStatus === "Open" || displayStatus === "Getting ready") return formatEndsIn(raffle.deadline, nowMs);
     if (displayStatus === "Finalizing") return "Draw in progress";
@@ -185,7 +197,6 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     return "Unknown";
   }, [displayStatus, raffle.deadline, nowMs]);
 
-  // numbers
   const anyRaffle = raffle as any;
   const soldN = useMemo(() => toNum(raffle.sold ?? "0"), [raffle.sold]);
   const minN = useMemo(() => toNum(anyRaffle?.minTickets ?? 0), [anyRaffle?.minTickets]);
@@ -202,17 +213,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   const minProgress = hasMin ? clamp01(soldN / minN) : 0;
   const maxProgress = hasMax ? clamp01(soldN / maxN) : 0;
 
-  const soldLine = useMemo(() => {
-    if (hasMax) return `${soldN} / ${maxN}`;
-    return `${soldN}`;
-  }, [soldN, hasMax, maxN]);
+  const soldLine = useMemo(() => (hasMax ? `${soldN} / ${maxN}` : `${soldN}`), [soldN, hasMax, maxN]);
+  const maxTicketsText = useMemo(() => (!hasMax ? "∞" : String(maxN)), [hasMax, maxN]);
 
-  const maxTicketsText = useMemo(() => {
-    if (!hasMax) return "∞";
-    return String(maxN);
-  }, [hasMax, maxN]);
-
-  // Past status block (same height as progress)
   const pastHeadline = useMemo(() => {
     if (displayStatus === "Settled") return `Settled at ${formatWhen(raffle.completedAt)}`;
     if (displayStatus === "Canceled") return `Canceled at ${formatWhen(raffle.canceledAt)}`;
@@ -222,10 +225,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   }, [displayStatus, raffle.completedAt, raffle.canceledAt]);
 
   const pastSubline = useMemo(() => {
-    if (displayStatus === "Settled") {
-      // Per your request: keep it human and short
-      return raffle.winner ? "Someone won!" : "Settled";
-    }
+    if (displayStatus === "Settled") return raffle.winner ? "Someone won!" : "Settled";
     if (displayStatus === "Canceled") {
       const reason = raffle.canceledReason?.trim();
       return reason ? reason : "Canceled";
@@ -234,7 +234,6 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     return null;
   }, [displayStatus, raffle.winner, raffle.canceledReason]);
 
-  // style palette
   const baseInk = "#5C1F3B";
   const baseInkStrong = "#4A0F2B";
   const foil = ribbon ? podiumFoil(ribbon) : null;
@@ -253,11 +252,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     cursor: "pointer",
     userSelect: "none",
     overflow: "hidden",
-
     background:
       foil?.bg ??
       "linear-gradient(180deg, rgba(255,190,215,0.92), rgba(255,210,230,0.78) 42%, rgba(255,235,246,0.82))",
-
     border: "1px solid rgba(255,255,255,0.78)",
     boxShadow: isHover ? "0 22px 46px rgba(0,0,0,0.18)" : "0 16px 34px rgba(0,0,0,0.14)",
     backdropFilter: "blur(14px)",
@@ -289,12 +286,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     pointerEvents: "none",
   };
 
-  const topRow: React.CSSProperties = {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 10,
-  };
+  const topRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 };
 
   const statusChip: React.CSSProperties = {
     padding: "6px 10px",
@@ -321,7 +313,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     cursor: "pointer",
   };
 
-  // make “link copied” impossible to miss
+  /** ---- polish #1: visible toast near top ---- */
   const copyToast: React.CSSProperties = {
     position: "absolute",
     top: 54,
@@ -329,7 +321,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     right: 12,
     padding: "8px 10px",
     borderRadius: 14,
-    background: "rgba(255,255,255,0.90)",
+    background: "rgba(255,255,255,0.92)",
     border: "1px solid rgba(0,0,0,0.08)",
     color: inkStrong,
     fontSize: 12,
@@ -339,17 +331,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     pointerEvents: "none",
   };
 
-  const titleWrap: React.CSSProperties = {
-    marginTop: 10,
-    textAlign: "center",
-  };
-
-  const smallKicker: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 800,
-    opacity: 0.9,
-    color: ink,
-  };
+  const titleWrap: React.CSSProperties = { marginTop: 10, textAlign: "center" };
+  const smallKicker: React.CSSProperties = { fontSize: 12, fontWeight: 800, opacity: 0.9, color: ink };
 
   const titleText: React.CSSProperties = {
     marginTop: 4,
@@ -358,6 +341,10 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     letterSpacing: 0.1,
     lineHeight: 1.15,
     color: inkStrong,
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
   };
 
   const prizeKicker: React.CSSProperties = {
@@ -382,12 +369,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     textShadow: "0 1px 0 rgba(255,255,255,0.35)",
   };
 
-  const midGrid: React.CSSProperties = {
-    marginTop: 16,
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 12,
-  };
+  const midGrid: React.CSSProperties = { marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 };
 
   const mini: React.CSSProperties = {
     borderRadius: 14,
@@ -396,46 +378,18 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     border: "1px solid rgba(0,0,0,0.06)",
   };
 
-  const miniLabel: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 950,
-    letterSpacing: 0.25,
-    opacity: 0.9,
-    color: ink,
-  };
+  const miniLabel: React.CSSProperties = { fontSize: 12, fontWeight: 950, letterSpacing: 0.25, opacity: 0.9, color: ink };
+  const miniValue: React.CSSProperties = { marginTop: 6, fontSize: 14, fontWeight: 950, color: inkStrong };
+  const hint: React.CSSProperties = { marginTop: 4, fontSize: 11, fontWeight: 800, opacity: 0.88, color: ink };
 
-  const miniValue: React.CSSProperties = {
-    marginTop: 6,
-    fontSize: 14,
-    fontWeight: 950,
-    color: inkStrong,
-  };
-
-  const hint: React.CSSProperties = {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: 800,
-    opacity: 0.88,
-    color: ink,
-  };
-
-  // Progress / Past blocks should take the same “slot”
+  /** ---- polish #2: fixed content slot so height stays stable ---- */
   const blockSlot: React.CSSProperties = {
     marginTop: 12,
-    minHeight: 86, // ✅ keeps card heights consistent
+    minHeight: 86,
   };
 
-  const barWrap: React.CSSProperties = {
-    display: "grid",
-    gap: 8,
-  };
-
-  const barLabelRow: React.CSSProperties = {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "baseline",
-    gap: 10,
-  };
+  const barWrap: React.CSSProperties = { display: "grid", gap: 8 };
+  const barLabelRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 };
 
   const barTrack: React.CSSProperties = {
     height: 10,
@@ -445,11 +399,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     boxShadow: "inset 0 1px 2px rgba(0,0,0,0.10)",
   };
 
-  const barFillBase: React.CSSProperties = {
-    height: "100%",
-    borderRadius: 999,
-    transition: "width 220ms ease",
-  };
+  const barFillBase: React.CSSProperties = { height: "100%", borderRadius: 999, transition: "width 220ms ease" };
 
   const barFillPending: React.CSSProperties = {
     ...barFillBase,
@@ -474,12 +424,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     opacity: 0.85,
   };
 
-  const smallHint: React.CSSProperties = {
-    fontSize: 11,
-    fontWeight: 900,
-    color: ink,
-    opacity: 0.92,
-  };
+  const smallHint: React.CSSProperties = { fontSize: 11, fontWeight: 900, color: ink, opacity: 0.92 };
 
   const pastBlock: React.CSSProperties = {
     borderRadius: 14,
@@ -490,20 +435,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     gap: 6,
   };
 
-  const pastLine1: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 950,
-    color: inkStrong,
-    lineHeight: 1.25,
-  };
-
-  const pastLine2: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 900,
-    color: ink,
-    opacity: 0.92,
-    lineHeight: 1.25,
-  };
+  const pastLine1: React.CSSProperties = { fontSize: 12, fontWeight: 950, color: inkStrong, lineHeight: 1.25 };
+  const pastLine2: React.CSSProperties = { fontSize: 12, fontWeight: 900, color: ink, opacity: 0.92, lineHeight: 1.25 };
 
   const bottomRow: React.CSSProperties = {
     marginTop: 14,
@@ -514,12 +447,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     gap: 10,
   };
 
-  const bottomText: React.CSSProperties = {
-    fontSize: 14,
-    fontWeight: 950,
-    color: inkStrong,
-    letterSpacing: 0.2,
-  };
+  const bottomText: React.CSSProperties = { fontSize: 14, fontWeight: 950, color: inkStrong, letterSpacing: 0.2 };
 
   return (
     <div
@@ -544,7 +472,6 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         `}
       </style>
 
-      {/* Ticket notches */}
       <div style={{ ...notch, left: -9 }} />
       <div style={{ ...notch, right: -9 }} />
 
@@ -575,14 +502,14 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       </div>
 
       <div style={prizeKicker}>Winner gets</div>
-      <div style={prizeValue}>{fmtUsdc(raffle.winningPot)} USDC</div>
+      <div style={prizeValue}>{fmtUsdcSmart(raffle.winningPot, "prize")} USDC</div>
 
       <div style={tearLine} />
 
       <div style={midGrid}>
         <div style={mini}>
           <div style={miniLabel}>Ticket price</div>
-          <div style={miniValue}>{fmtUsdc(raffle.ticketPrice)} USDC</div>
+          <div style={miniValue}>{fmtUsdcSmart(raffle.ticketPrice, "ticket")} USDC</div>
         </div>
 
         <div style={mini}>
@@ -592,14 +519,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         </div>
       </div>
 
-      {/* ✅ Progress for active only, summary block for past — same slot height */}
       <div style={blockSlot}>
         {showProgress && hasMin ? (
           <div style={barWrap}>
             {!minReached ? (
               <>
                 <div style={barLabelRow}>
-                  <span style={miniLabel}>Minimum needed</span>
+                  <span style={miniLabel}>Minimum target</span>
                   <span style={smallHint}>
                     {soldN} / {minN}
                   </span>
@@ -608,7 +534,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
                   <div style={{ ...barFillPending, width: `${Math.round(minProgress * 100)}%` }} />
                 </div>
                 <div style={{ fontSize: 11, opacity: 0.88, color: ink }}>
-                  This minimum must be reached before the draw step can happen.
+                  Once this target is met, the raffle can move to the draw step.
                 </div>
               </>
             ) : (
@@ -636,7 +562,6 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
             )}
           </div>
         ) : (
-          // Past/drawing/finalizing block
           <div style={pastBlock}>
             <div style={pastLine1}>{pastHeadline ?? bottomLine}</div>
             <div style={pastLine2}>{pastSubline ?? ""}</div>
@@ -651,14 +576,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
 
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" stroke={inkStrong} strokeWidth="2" opacity="0.8" />
-          <path
-            d="M12 7v6l4 2"
-            stroke={inkStrong}
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity="0.85"
-          />
+          <path d="M12 7v6l4 2" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
         </svg>
       </div>
     </div>
