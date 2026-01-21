@@ -50,8 +50,6 @@ function getRaffleFromQuery(): string | null {
 function setRaffleQuery(id: string | null) {
   try {
     const url = new URL(window.location.href);
-
-    // ✅ keep ONLY raffle param (and no hash)
     url.hash = "";
 
     if (!id) {
@@ -129,16 +127,12 @@ export default function App() {
     const addr = extractAddress(id) ?? id;
     setSelectedRaffleId(addr);
     setDetailsOpen(true);
-
-    // ✅ reflect in URL as ?raffle=0x...
     setRaffleQuery(addr);
   }
 
   function closeRaffle() {
     setDetailsOpen(false);
     setSelectedRaffleId(null);
-
-    // ✅ remove query param
     setRaffleQuery(null);
   }
 
@@ -181,6 +175,7 @@ export default function App() {
     borderRadius: 12,
     padding: "8px 10px",
     cursor: "pointer",
+    whiteSpace: "nowrap",
   };
 
   const topBtnActive: React.CSSProperties = {
@@ -192,119 +187,155 @@ export default function App() {
   const sectionWrap: React.CSSProperties = { marginTop: 18 };
   const grid: React.CSSProperties = { marginTop: 8, display: "grid", gap: 10 };
 
+  // ✅ full-screen background, with a centered responsive content column
+  const pageBg: React.CSSProperties = {
+    minHeight: "100vh",
+    backgroundImage: `url(${chosenBg})`,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+    backgroundAttachment: "fixed",
+  };
+
+  // ✅ soft overlay for readability (still transparent)
+  const overlay: React.CSSProperties = {
+    minHeight: "100vh",
+    background:
+      "radial-gradient(900px 520px at 15% 10%, rgba(246,182,200,0.18), transparent 60%)," +
+      "radial-gradient(900px 520px at 85% 5%, rgba(169,212,255,0.16), transparent 60%)," +
+      "rgba(255,255,255,0.03)",
+  };
+
+  // ✅ responsive container: wide on desktop, comfy on mobile
+  const container: React.CSSProperties = {
+    maxWidth: 1180,
+    margin: "0 auto",
+    padding: "18px 14px", // mobile-friendly gutters
+  };
+
+  // ✅ top bar wraps cleanly on mobile
+  const topBar: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+  };
+
+  const navGroup: React.CSSProperties = {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+    alignItems: "center",
+  };
+
+  const rightGroup: React.CSSProperties = {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+  };
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundImage: `url(${chosenBg})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-        backgroundAttachment: "fixed",
-      }}
-    >
-      {/* ✅ soft overlay for readability, keeps background visible */}
-      <div
-        style={{
-          minHeight: "100vh",
-          padding: 20,
-          background:
-            "radial-gradient(900px 520px at 15% 10%, rgba(246,182,200,0.18), transparent 60%)," +
-            "radial-gradient(900px 520px at 85% 5%, rgba(169,212,255,0.16), transparent 60%)," +
-            "rgba(255,255,255,0.03)",
-        }}
-      >
-        <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
+    <div style={pageBg}>
+      <div style={overlay}>
+        <div style={container}>
+          <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
 
-        {/* Top bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <b style={{ cursor: "pointer" }} onClick={() => setPage("home")}>
-            Ppopgi
-          </b>
+          {/* Top bar */}
+          <div style={topBar}>
+            <b
+              style={{ cursor: "pointer", userSelect: "none", fontSize: 16, letterSpacing: 0.2 }}
+              onClick={() => setPage("home")}
+              title="Go home"
+            >
+              Ppopgi
+            </b>
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button style={page === "explore" ? topBtnActive : topBtn} onClick={() => setPage("explore")}>
-              Explore
-            </button>
-
-            {account && (
-              <button
-                style={page === "dashboard" ? topBtnActive : topBtn}
-                onClick={() => setPage("dashboard")}
-                title="Your created + joined raffles"
-              >
-                Dashboard
+            <div style={navGroup}>
+              <button style={page === "explore" ? topBtnActive : topBtn} onClick={() => setPage("explore")}>
+                Explore
               </button>
-            )}
 
-            <button style={topBtn} onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
-              Create
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button style={topBtn} onClick={() => setCashierOpen(true)}>
-              Cashier
-            </button>
-
-            {!account ? (
-              <button style={topBtn} onClick={() => setSignInOpen(true)}>
-                Sign in
-              </button>
-            ) : (
-              <>
-                <span style={{ fontSize: 13, opacity: 0.9 }}>Your account: {short(account)}</span>
-                <button style={topBtn} onClick={onSignOut}>
-                  Sign out
+              {account && (
+                <button
+                  style={page === "dashboard" ? topBtnActive : topBtn}
+                  onClick={() => setPage("dashboard")}
+                  title="Your created + joined raffles"
+                >
+                  Dashboard
                 </button>
-              </>
-            )}
+              )}
+
+              <button style={topBtn} onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}>
+                Create
+              </button>
+            </div>
+
+            <div style={rightGroup}>
+              <button style={topBtn} onClick={() => setCashierOpen(true)}>
+                Cashier
+              </button>
+
+              {!account ? (
+                <button style={topBtn} onClick={() => setSignInOpen(true)}>
+                  Sign in
+                </button>
+              ) : (
+                <>
+                  <span style={{ fontSize: 13, opacity: 0.92, whiteSpace: "nowrap" }}>
+                    Your account: {short(account)}
+                  </span>
+                  <button style={topBtn} onClick={onSignOut}>
+                    Sign out
+                  </button>
+                </>
+              )}
+            </div>
           </div>
+
+          {/* Home-only note (ExplorePage shows its own note inside) */}
+          {page === "home" && homeNote && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.88 }}>{homeNote}</div>}
+          {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{createdHint}</div>}
+
+          {/* HOME */}
+          {page === "home" && (
+            <>
+              <div style={sectionWrap}>
+                <h3 style={{ margin: 0 }}>Big prizes right now</h3>
+                <div style={grid}>
+                  {bigPrizes.map((r) => (
+                    <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+                  ))}
+                  {bigPrizes.length === 0 && <div style={{ opacity: 0.85 }}>No open raffles right now.</div>}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 22 }}>
+                <h3 style={{ margin: 0 }}>Ending soon</h3>
+                <div style={grid}>
+                  {endingSoon.map((r) => (
+                    <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+                  ))}
+                  {endingSoon.length === 0 && <div style={{ opacity: 0.85 }}>Nothing is ending soon.</div>}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* EXPLORE */}
+          {page === "explore" && <ExplorePage onOpenRaffle={openRaffle} />}
+
+          {/* DASHBOARD */}
+          {page === "dashboard" && <DashboardPage account={account} onOpenRaffle={openRaffle} />}
+
+          {/* Modals */}
+          <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
+          <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
+          <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
+          <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} />
         </div>
-
-        {/* Home-only note (ExplorePage shows its own note inside) */}
-        {page === "home" && homeNote && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>{homeNote}</div>}
-
-        {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>{createdHint}</div>}
-
-        {/* HOME */}
-        {page === "home" && (
-          <>
-            <div style={sectionWrap}>
-              <h3 style={{ margin: 0 }}>Big prizes right now</h3>
-              <div style={grid}>
-                {bigPrizes.map((r) => (
-                  <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-                ))}
-                {bigPrizes.length === 0 && <div style={{ opacity: 0.8 }}>No open raffles right now.</div>}
-              </div>
-            </div>
-
-            <div style={{ marginTop: 22 }}>
-              <h3 style={{ margin: 0 }}>Ending soon</h3>
-              <div style={grid}>
-                {endingSoon.map((r) => (
-                  <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-                ))}
-                {endingSoon.length === 0 && <div style={{ opacity: 0.8 }}>Nothing is ending soon.</div>}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* EXPLORE */}
-        {page === "explore" && <ExplorePage onOpenRaffle={openRaffle} />}
-
-        {/* DASHBOARD */}
-        {page === "dashboard" && <DashboardPage account={account} onOpenRaffle={openRaffle} />}
-
-        {/* Modals */}
-        <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
-        <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
-
-        <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
-
-        <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} />
       </div>
     </div>
   );
