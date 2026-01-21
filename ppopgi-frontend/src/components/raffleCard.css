@@ -1,248 +1,39 @@
-/* src/components/raffleCard.css */
+/* src/components/RaffleCard.css */
 
-.pp-ticket2 {
-  position: relative;
-  width: 100%;
-  max-width: 360px;            /* ✅ ticket-like width */
-  border-radius: 18px;
-  padding: 14px 14px 12px;
-  cursor: pointer;
-  user-select: none;
-
-  /* ✅ pink glass ticket */
-  background: rgba(255, 255, 255, 0.20);
-  border: 1px solid rgba(255, 255, 255, 0.44);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12);
+/* ✅ 2-line clamp for long raffle names */
+.pp-rc-titleClamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 
   overflow: hidden;
-  transform: translateY(0);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  text-overflow: ellipsis;
 }
 
-.pp-ticket2:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.14);
-}
-
-.pp-ticket2:active {
-  transform: translateY(-1px);
-}
-
-/* ✅ ticket wash */
-.pp-ticket2::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(520px 240px at 20% 15%, rgba(246, 182, 200, 0.55), transparent 62%),
-    radial-gradient(520px 240px at 85% 12%, rgba(250, 209, 184, 0.40), transparent 62%),
-    radial-gradient(560px 300px at 70% 95%, rgba(203, 183, 246, 0.28), transparent 65%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 40%, rgba(255, 255, 255, 0.08));
-  pointer-events: none;
-}
-
-/* ✅ NOTCHES (ticket cut-outs) */
-.pp-ticket2::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-
-  /* Two “holes” on left & right */
-  background:
-    radial-gradient(circle 13px at 0% 44%, rgba(0,0,0,0) 98%, rgba(0,0,0,0) 100%),
-    radial-gradient(circle 13px at 100% 44%, rgba(0,0,0,0) 98%, rgba(0,0,0,0) 100%);
-}
-
-/* The actual cut effect is done by masking */
-@supports (mask: radial-gradient(circle, #000 60%, transparent 61%)) {
-  .pp-ticket2 {
-    -webkit-mask:
-      radial-gradient(circle 13px at 0% 44%, transparent 98%, #000 100%),
-      radial-gradient(circle 13px at 100% 44%, transparent 98%, #000 100%),
-      linear-gradient(#000, #000);
-    -webkit-mask-composite: source-out, source-out, source-over;
-    mask:
-      radial-gradient(circle 13px at 0% 44%, transparent 98%, #000 100%),
-      radial-gradient(circle 13px at 100% 44%, transparent 98%, #000 100%),
-      linear-gradient(#000, #000);
-    mask-composite: exclude, exclude, add;
+/* ✅ pulse animation moved out of the component */
+@keyframes ppPulse {
+  0% {
+    transform: scale(1);
+    filter: saturate(1);
+  }
+  50% {
+    transform: scale(1.045);
+    filter: saturate(1.2);
+  }
+  100% {
+    transform: scale(1);
+    filter: saturate(1);
   }
 }
 
-.pp-ticket2 > * {
-  position: relative;
-  z-index: 1;
+/* apply only when needed */
+.pp-rc-pulse {
+  animation: ppPulse 950ms ease-in-out infinite;
 }
 
-.pp-ticket2:focus-visible {
-  outline: 3px solid rgba(255, 216, 154, 0.78);
-  outline-offset: 3px;
-}
-
-/* header */
-.pp-ticket2__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.pp-ticket2__title {
-  font-weight: 950;
-  font-size: 15px;
-  letter-spacing: 0.2px;
-  color: #2B2B33;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 240px;
-}
-
-.pp-ticket2__headerRight {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* stamp */
-.pp-stamp2 {
-  font-size: 11px;
-  font-weight: 950;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,0,0,0.10);
-  background: rgba(255,255,255,0.70);
-  color: #2B2B33;
-  white-space: nowrap;
-}
-
-.pp-stamp2--open { background: rgba(169, 212, 255, 0.50); }
-.pp-stamp2--drawing { background: rgba(255, 216, 154, 0.58); }
-.pp-stamp2--settled { background: rgba(203, 183, 246, 0.58); }
-.pp-stamp2--canceled { background: rgba(246, 182, 200, 0.58); }
-.pp-stamp2--funding { background: rgba(250, 209, 184, 0.58); }
-
-/* share button (no submenu) */
-.pp-shareBtn2 {
-  border: 1px solid rgba(0,0,0,0.12);
-  background: rgba(255,255,255,0.78);
-  border-radius: 999px;
-  padding: 6px 10px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 900;
-  color: #2B2B33;
-  white-space: nowrap;
-  transition: transform 120ms ease, border-color 120ms ease;
-}
-
-.pp-shareBtn2:hover {
-  border-color: rgba(0,0,0,0.22);
-  transform: translateY(-1px);
-}
-
-/* prize row */
-.pp-ticket2__prizeRow {
-  margin-top: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 12px;
-}
-
-.pp-prizeBig {
-  display: grid;
-  gap: 4px;
-}
-
-.pp-prizeBig__label {
-  font-size: 12px;
-  opacity: 0.85;
-  color: #2B2B33;
-  font-weight: 800;
-}
-
-.pp-prizeBig__value {
-  font-size: 20px; /* ✅ bigger prize */
-  font-weight: 1000;
-  color: #2B2B33;
-  letter-spacing: 0.2px;
-}
-
-/* small facts on the right */
-.pp-miniFacts {
-  display: grid;
-  gap: 8px;
-  min-width: 120px;
-}
-
-.pp-miniFact {
-  border-radius: 12px;
-  padding: 8px 10px;
-  background: rgba(255,255,255,0.20);
-  border: 1px solid rgba(255,255,255,0.28);
-}
-
-.pp-miniFact__k {
-  font-size: 11px;
-  opacity: 0.82;
-  color: #2B2B33;
-}
-
-.pp-miniFact__v {
-  margin-top: 3px;
-  font-size: 12px;
-  font-weight: 950;
-  color: #2B2B33;
-}
-
-/* tear line */
-.pp-tear2 {
-  margin-top: 12px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.72);
-  opacity: 0.95;
-}
-
-/* bottom */
-.pp-ticket2__bottom {
-  margin-top: 10px;
-  display: grid;
-  gap: 8px;
-}
-
-.pp-bottomLine {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.pp-bottomK {
-  font-size: 12px;
-  opacity: 0.82;
-  color: #2B2B33;
-  font-weight: 800;
-}
-
-.pp-bottomV {
-  font-size: 12px;
-  font-weight: 950;
-  color: #2B2B33;
-  text-align: right;
-}
-
-.pp-hint2 {
-  font-size: 12px;
-  opacity: 0.86;
-  color: #2B2B33;
-}
-
-.pp-toast2 {
-  font-size: 12px;
-  font-weight: 850;
-  color: #2B2B33;
-  opacity: 0.9;
+/* respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .pp-rc-pulse {
+    animation: none;
+  }
 }
