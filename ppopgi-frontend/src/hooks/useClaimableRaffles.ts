@@ -15,6 +15,10 @@ function normAddr(a: string) {
   return a.trim().toLowerCase();
 }
 
+function isHexAddress(a: string) {
+  return /^0x[0-9a-fA-F]{40}$/.test(a);
+}
+
 export type ClaimableRaffleItem = {
   raffle: RaffleListItem;
   roles: { created: boolean; participated: boolean };
@@ -23,9 +27,37 @@ export type ClaimableRaffleItem = {
   claimableUsdc: string; // raw uint256 as string
   claimableNative: string; // raw uint256 as string
   isCreator: boolean;
+
+  // NEW: helps debug when UI shows 0 but reads failed
+  readErrors?: string[];
 };
 
 type Mode = "indexer" | "empty";
+
+type Merged = Array<{ raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>;
+
+async function readWithFallback<T>(
+  args: Parameters<typeof readContract>[0],
+  fallbackMethodName?: string
+): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
+  try {
+    const v = await readContract(args);
+    return { ok: true, value: v as any as T };
+  } catch (e1: any) {
+    if (!fallbackMethodName) {
+      return { ok: false, error: String(e1?.message || e1) };
+    }
+
+    try {
+      const v2 = await readContract({ ...(args as any), method: fallbackMethodName } as any);
+      return { ok: true, value: v2 as any as T };
+    } catch (e2: any) {
+      const m1 = String(e1?.message || e1);
+      const m2 = String(e2?.message || e2);
+      return { ok: false, error: `${m1} | fallback: ${m2}` };
+    }
+  }
+}
 
 export function useClaimableRaffles(userAddress: string | null, limit = 200) {
   const [items, setItems] = useState<ClaimableRaffleItem[] | null>(null);
@@ -41,13 +73,10 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
     let alive = true;
     const controller = new AbortController();
 
-    async function fetchFromSubgraph(): Promise<{
-      merged: Array<{ raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>;
-    }> {
+    async function fetchFromSubgraph(): Promise<{ merged: Merged }> {
       const url = mustEnv("VITE_SUBGRAPH_URL");
       const user = me; // string lowercased
 
-      // We query created raffles + participated raffles via events.
       const query = `
         query Claimables($user: Bytes!, $first: Int!) {
           created: raffles(first: $first, where: { creator: $user }) {
@@ -105,7 +134,6 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
       const participatedEvents = (json.data?.participated ?? []) as Array<{ raffle: any }>;
       const participated = participatedEvents.map((e) => e.raffle).filter(Boolean) as RaffleListItem[];
 
-      // Merge + dedupe with roles
       const byId = new Map<string, { raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>();
 
       for (const r of created) {
@@ -115,16 +143,12 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
       for (const r of participated) {
         const key = normAddr(r.id);
         const prev = byId.get(key);
-        if (prev) {
-          prev.roles.participated = true;
-        } else {
-          byId.set(key, { raffle: r, roles: { created: false, participated: true } });
-        }
+        if (prev) prev.roles.participated = true;
+        else byId.set(key, { raffle: r, roles: { created: false, participated: true } });
       }
 
       const merged = Array.from(byId.values());
 
-      // Sort: newest activity-ish first (lastUpdatedTimestamp desc)
       merged.sort((a, b) => {
         const A = Number(a.raffle.lastUpdatedTimestamp || "0");
         const B = Number(b.raffle.lastUpdatedTimestamp || "0");
@@ -134,56 +158,87 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
       return { merged };
     }
 
-    async function enrichOnChain(
-      merged: Array<{ raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>
-    ): Promise<ClaimableRaffleItem[]> {
+    async function enrichOnChain(merged: Merged): Promise<ClaimableRaffleItem[]> {
       if (!me) return [];
 
-      // Lightweight on-chain reads for each raffle:
-      // claimableFunds(me), claimableNative(me), creator()
       const out: ClaimableRaffleItem[] = [];
-
-      // small concurrency control (avoid blasting RPC)
       const batchSize = 10;
+
       for (let i = 0; i < merged.length; i += batchSize) {
         const slice = merged.slice(i, i + batchSize);
 
         const results = await Promise.all(
           slice.map(async ({ raffle, roles }) => {
+            const errors: string[] = [];
+
+            const addr = String(raffle.id || "");
+            if (!isHexAddress(addr)) {
+              return {
+                raffle,
+                roles,
+                claimableUsdc: "0",
+                claimableNative: "0",
+                isCreator: false,
+                readErrors: [`BAD_RAFFLE_ADDRESS: ${addr}`],
+              } satisfies ClaimableRaffleItem;
+            }
+
             const raffleContract = getContract({
               client: thirdwebClient,
               chain: ETHERLINK_CHAIN,
-              address: raffle.id,
+              address: addr,
             });
 
-            const [claimableUsdc, claimableNative, creator] = await Promise.all([
-              readContract({
+            // claimableFunds(me)
+            const rFunds = await readWithFallback<bigint>(
+              {
                 contract: raffleContract,
                 method: "function claimableFunds(address) view returns (uint256)",
                 params: [me],
-              }).catch(() => 0n),
-              readContract({
+              } as any,
+              "claimableFunds"
+            );
+            if (!rFunds.ok) errors.push(`claimableFunds: ${rFunds.error}`);
+
+            // claimableNative(me)
+            const rNative = await readWithFallback<bigint>(
+              {
                 contract: raffleContract,
                 method: "function claimableNative(address) view returns (uint256)",
                 params: [me],
-              }).catch(() => 0n),
-              readContract({
+              } as any,
+              "claimableNative"
+            );
+            if (!rNative.ok) errors.push(`claimableNative: ${rNative.error}`);
+
+            // creator()
+            const rCreator = await readWithFallback<string>(
+              {
                 contract: raffleContract,
                 method: "function creator() view returns (address)",
                 params: [],
-              }).catch(() => "0x0000000000000000000000000000000000000000"),
-            ]);
+              } as any,
+              "creator"
+            );
+            if (!rCreator.ok) errors.push(`creator: ${rCreator.error}`);
 
-            const creatorAddr = normAddr(String(creator));
+            const claimableUsdc = rFunds.ok ? BigInt(rFunds.value as any) : 0n;
+            const claimableNative = rNative.ok ? BigInt(rNative.value as any) : 0n;
+
+            const creatorAddr = rCreator.ok ? normAddr(String(rCreator.value)) : "0x0";
             const isCreator = creatorAddr === me;
 
-            return {
+            const item: ClaimableRaffleItem = {
               raffle,
               roles,
               claimableUsdc: String(claimableUsdc),
               claimableNative: String(claimableNative),
               isCreator,
-            } satisfies ClaimableRaffleItem;
+            };
+
+            if (errors.length) item.readErrors = errors;
+
+            return item;
           })
         );
 
@@ -220,7 +275,14 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
         if (!alive) return;
 
         setItems(enriched);
-        setNote(null);
+
+        // Optional: if lots of reads failed, hint it
+        const failed = enriched.filter((x) => (x.readErrors?.length ?? 0) > 0).length;
+        if (failed > 0) {
+          setNote(`Some on-chain reads failed (${failed}). If a card shows “0” incorrectly, hit Refresh.`);
+        } else {
+          setNote(null);
+        }
       } catch {
         if (!alive) return;
         setItems([]);
