@@ -18,6 +18,9 @@ import bg1 from "./assets/backgrounds/bg1.webp";
 import bg2 from "./assets/backgrounds/bg2.webp";
 import bg3 from "./assets/backgrounds/bg3.webp";
 
+// ✅ Home layouts (podium + ticket rows)
+import "./pages/homeTickets.css";
+
 const BACKGROUNDS = [bg1, bg2, bg3];
 const pickRandomBg = () => BACKGROUNDS[Math.floor(Math.random() * BACKGROUNDS.length)];
 
@@ -48,7 +51,9 @@ function setRaffleQuery(id: string | null) {
     url.search = "";
     if (id) url.searchParams.set("raffle", id);
     window.history.pushState({}, "", url.toString());
-  } catch {}
+  } catch {
+    // ignore
+  }
 }
 
 export default function App() {
@@ -130,7 +135,9 @@ export default function App() {
   async function onSignOut() {
     try {
       if (activeWallet) disconnect(activeWallet);
-    } catch {}
+    } catch {
+      // ignore
+    }
     clearSession();
     setCreatedHint(null);
   }
@@ -154,7 +161,7 @@ export default function App() {
   };
 
   const container: React.CSSProperties = {
-    maxWidth: 1400,              // ← desktop width (adjust freely)
+    maxWidth: 1400,
     margin: "0 auto",
     padding: "18px 16px",
   };
@@ -174,7 +181,30 @@ export default function App() {
     border: "1px solid rgba(0,0,0,0.28)",
   };
 
-  /* ───────────── render ───────────── */
+  const sectionWrap: React.CSSProperties = { marginTop: 18 };
+
+  /* ───────────── render helpers ───────────── */
+
+  const podium = useMemo(() => {
+    const sorted = [...bigPrizes].sort((a, b) => {
+      try {
+        return Number(BigInt(b.winningPot || "0") - BigInt(a.winningPot || "0"));
+      } catch {
+        return 0;
+      }
+    });
+
+    const top3 = sorted.slice(0, 3);
+    const gold = top3[0] || null;
+    const silver = top3[1] || null;
+    const bronze = top3[2] || null;
+
+    return { gold, silver, bronze };
+  }, [bigPrizes]);
+
+  const endingSoonSorted = useMemo(() => {
+    return [...endingSoon].sort((a, b) => Number(a.deadline || "0") - Number(b.deadline || "0"));
+  }, [endingSoon]);
 
   return (
     <div style={pageBg}>
@@ -184,7 +214,7 @@ export default function App() {
 
           {/* Top bar */}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "space-between" }}>
-            <b style={{ cursor: "pointer" }} onClick={() => setPage("home")}>
+            <b style={{ cursor: "pointer", userSelect: "none" }} onClick={() => setPage("home")} title="Go home">
               Ppopgi
             </b>
 
@@ -202,7 +232,7 @@ export default function App() {
               </button>
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <button style={topBtn} onClick={() => setCashierOpen(true)}>
                 Cashier
               </button>
@@ -212,7 +242,7 @@ export default function App() {
                 </button>
               ) : (
                 <>
-                  <span style={{ fontSize: 13 }}>Your account: {short(account)}</span>
+                  <span style={{ fontSize: 13, whiteSpace: "nowrap" }}>Your account: {short(account)}</span>
                   <button style={topBtn} onClick={onSignOut}>
                     Sign out
                   </button>
@@ -221,26 +251,46 @@ export default function App() {
             </div>
           </div>
 
-          {page === "home" && homeNote && <div style={{ marginTop: 12 }}>{homeNote}</div>}
-          {createdHint && <div style={{ marginTop: 12 }}>{createdHint}</div>}
+          {page === "home" && homeNote && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.88 }}>{homeNote}</div>}
+          {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{createdHint}</div>}
 
+          {/* HOME */}
           {page === "home" && (
             <>
-              <h3>Big prizes right now</h3>
-              {bigPrizes.map((r) => (
-                <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-              ))}
+              <div style={sectionWrap}>
+                <h3 style={{ margin: 0 }}>Big prizes right now</h3>
 
-              <h3 style={{ marginTop: 22 }}>Ending soon</h3>
-              {endingSoon.map((r) => (
-                <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-              ))}
+                {/* Podium: silver left, gold middle raised, bronze right */}
+                <div className="pp-podium">
+                  <div className="pp-podium__silver">{podium.silver ? <RaffleCard raffle={podium.silver} onOpen={openRaffle} /> : null}</div>
+                  <div className="pp-podium__gold">{podium.gold ? <RaffleCard raffle={podium.gold} onOpen={openRaffle} /> : null}</div>
+                  <div className="pp-podium__bronze">{podium.bronze ? <RaffleCard raffle={podium.bronze} onOpen={openRaffle} /> : null}</div>
+
+                  {bigPrizes.length === 0 && <div style={{ opacity: 0.85 }}>No open raffles right now.</div>}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 22 }}>
+                <h3 style={{ margin: 0 }}>Ending soon</h3>
+
+                {/* Tickets next to each other, soonest on the left */}
+                <div className="pp-rowTickets">
+                  {endingSoonSorted.map((r) => (
+                    <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+                  ))}
+                  {endingSoonSorted.length === 0 && <div style={{ opacity: 0.85 }}>Nothing is ending soon.</div>}
+                </div>
+              </div>
             </>
           )}
 
+          {/* EXPLORE */}
           {page === "explore" && <ExplorePage onOpenRaffle={openRaffle} />}
+
+          {/* DASHBOARD */}
           {page === "dashboard" && <DashboardPage account={account} onOpenRaffle={openRaffle} />}
 
+          {/* Modals */}
           <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
           <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
           <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
