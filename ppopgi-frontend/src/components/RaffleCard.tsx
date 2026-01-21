@@ -52,21 +52,41 @@ type DisplayStatus = "Open" | "Finalizing" | "Drawing" | "Settled" | "Canceled" 
 function statusTheme(s: DisplayStatus) {
   if (s === "Open")
     return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
+
+  // ✅ Finalizing now BLUE + blinking
   if (s === "Finalizing")
+    return {
+      bg: "rgba(120, 170, 255, 0.92)",
+      fg: "#0E2A66",
+      border: "1px solid rgba(0,0,0,0.10)",
+      pulse: true,
+      pulseKind: "blue" as const,
+    };
+
+  // Drawing can also use the same blue family (bottom line will blink too)
+  if (s === "Drawing")
+    return {
+      bg: "rgba(203, 183, 246, 0.92)",
+      fg: "#2E1C5C",
+      border: "1px solid rgba(0,0,0,0.08)",
+      pulse: true,
+      pulseKind: "blue" as const,
+    };
+
+  if (s === "Settled")
+    return { bg: "rgba(255, 216, 154, 0.92)", fg: "#4A2A00", border: "1px solid rgba(0,0,0,0.08)" };
+
+  // ✅ Canceled pill in RED
+  if (s === "Canceled")
     return {
       bg: "rgba(255, 120, 140, 0.92)",
       fg: "#5A0012",
       border: "1px solid rgba(0,0,0,0.10)",
-      pulse: true,
     };
-  if (s === "Drawing")
-    return { bg: "rgba(203, 183, 246, 0.92)", fg: "#2E1C5C", border: "1px solid rgba(0,0,0,0.08)" };
-  if (s === "Settled")
-    return { bg: "rgba(255, 216, 154, 0.92)", fg: "#4A2A00", border: "1px solid rgba(0,0,0,0.08)" };
-  if (s === "Canceled")
-    return { bg: "rgba(230, 234, 242, 0.92)", fg: "#2B2B33", border: "1px solid rgba(0,0,0,0.08)" };
+
   if (s === "Getting ready")
     return { bg: "rgba(169, 212, 255, 0.92)", fg: "#133A66", border: "1px solid rgba(0,0,0,0.08)" };
+
   return { bg: "rgba(255,255,255,0.72)", fg: "#5C2A3E", border: "1px solid rgba(0,0,0,0.08)" };
 }
 
@@ -122,7 +142,13 @@ function formatWhen(tsSeconds: string | null | undefined) {
   const n = Number(tsSeconds || "0");
   if (!Number.isFinite(n) || n <= 0) return "Unknown time";
   try {
-    return new Date(n * 1000).toLocaleString();
+    return new Date(n * 1000).toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return "Unknown time";
   }
@@ -143,24 +169,17 @@ function shortTime(tsSeconds: string | null | undefined) {
   }
 }
 
+// ✅ requested wording
 function canceledCopy(reason?: string | null) {
   const r = (reason || "").trim().toLowerCase();
 
-  // common main reason
-  if (
-    r.includes("min") ||
-    r.includes("minimum") ||
-    r.includes("not reached") ||
-    r.includes("insufficient") ||
-    r.includes("not enough")
-  ) {
-    return "Not enough tickets";
+  if (r.includes("min") || r.includes("minimum") || r.includes("not reached") || r.includes("not enough")) {
+    return "Min tickets sold not reached";
   }
 
-  // other cancellation reasons can still be useful but short
   if (!r) return "Canceled";
-  if (r.length > 42) return r.slice(0, 40) + "…";
-  return reason!;
+  if (r.length > 44) return (reason || "").slice(0, 42) + "…";
+  return reason || "Canceled";
 }
 
 export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
@@ -185,7 +204,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     e.preventDefault();
     e.stopPropagation();
 
-    // 1) try native share sheet (mobile)
+    // 1) native share sheet if available
     try {
       if (navigator.share) {
         await navigator.share({
@@ -198,10 +217,10 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         return;
       }
     } catch {
-      // user canceled share sheet or not supported -> fall back to copy
+      // canceled / not supported -> fall back to copy
     }
 
-    // 2) fallback: copy link
+    // 2) copy link fallback
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopyMsg("Link copied — share it with your friends!");
@@ -209,7 +228,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       window.prompt("Copy this link:", shareUrl);
       setCopyMsg("Copy the link — share it with your friends!");
     }
-    window.setTimeout(() => setCopyMsg(null), 1400);
+    window.setTimeout(() => setCopyMsg(null), 1500);
   }
 
   // one user-facing status
@@ -281,12 +300,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   }, [displayStatus, raffle.completedAt, raffle.canceledAt]);
 
   const pastSubline = useMemo(() => {
-    if (displayStatus === "Settled") {
-      return raffle.winner ? "Someone won!" : "Settled";
-    }
-    if (displayStatus === "Canceled") {
-      return canceledCopy(raffle.canceledReason);
-    }
+    if (displayStatus === "Settled") return raffle.winner ? "Someone won!" : "Settled";
+    if (displayStatus === "Canceled") return canceledCopy(raffle.canceledReason);
     if (displayStatus === "Drawing" || displayStatus === "Finalizing") return "Waiting for the result";
     return null;
   }, [displayStatus, raffle.winner, raffle.canceledReason]);
@@ -310,11 +325,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     cursor: "pointer",
     userSelect: "none",
     overflow: "hidden",
-
     background:
       foil?.bg ??
       "linear-gradient(180deg, rgba(255,190,215,0.92), rgba(255,210,230,0.78) 42%, rgba(255,235,246,0.82))",
-
     border: "1px solid rgba(255,255,255,0.78)",
     boxShadow: isHover ? "0 22px 46px rgba(0,0,0,0.18)" : "0 16px 34px rgba(0,0,0,0.14)",
     backdropFilter: "blur(14px)",
@@ -364,7 +377,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     color: status.fg,
     border: status.border,
     boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
-    animation: status.pulse ? "ppPulse 950ms ease-in-out infinite" : undefined,
+    animation: status.pulse ? "ppPulseBlue 950ms ease-in-out infinite" : undefined,
   };
 
   const shareBtn: React.CSSProperties = {
@@ -378,10 +391,10 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     cursor: "pointer",
   };
 
-  // make “link copied” impossible to miss
+  // ✅ move toast lower + make sure it is ABOVE everything (zIndex)
   const copyToast: React.CSSProperties = {
     position: "absolute",
-    top: 54,
+    top: 74, // below the topRow; no longer collides with “Ppopgi”
     left: 12,
     right: 12,
     padding: "8px 10px",
@@ -395,6 +408,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     textAlign: "center",
     boxShadow: "0 14px 26px rgba(0,0,0,0.12)",
     pointerEvents: "none",
+    zIndex: 50,
   };
 
   const titleWrap: React.CSSProperties = {
@@ -480,7 +494,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   // Progress / Past blocks should take the same “slot”
   const blockSlot: React.CSSProperties = {
     marginTop: 12,
-    minHeight: 86, // ✅ keeps card heights consistent
+    minHeight: 86,
   };
 
   const barWrap: React.CSSProperties = {
@@ -572,14 +586,16 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     gap: 10,
   };
 
+  // ✅ bottom “Draw in progress” should blink BLUE (same vibe as Finalizing)
   const bottomText: React.CSSProperties = {
     fontSize: 14,
     fontWeight: 950,
-    color: inkStrong,
     letterSpacing: 0.2,
+    color: displayStatus === "Finalizing" || displayStatus === "Drawing" ? "#0E2A66" : inkStrong,
+    animation: displayStatus === "Finalizing" || displayStatus === "Drawing" ? "ppBlinkBlue 950ms ease-in-out infinite" : undefined,
   };
 
-  // Tiny affordance (always visible)
+  // ✅ replace weird arrow with a “sparkle” affordance (still subtle)
   const affordance: React.CSSProperties = {
     position: "absolute",
     right: 12,
@@ -611,10 +627,15 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     >
       <style>
         {`
-          @keyframes ppPulse {
+          @keyframes ppPulseBlue {
             0%   { transform: scale(1);   filter: saturate(1); }
-            50%  { transform: scale(1.045); filter: saturate(1.2); }
+            50%  { transform: scale(1.045); filter: saturate(1.25); }
             100% { transform: scale(1);   filter: saturate(1); }
+          }
+          @keyframes ppBlinkBlue {
+            0% { opacity: 1; }
+            50% { opacity: 0.55; }
+            100% { opacity: 1; }
           }
         `}
       </style>
@@ -626,7 +647,6 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
       <div style={topRow}>
         <div style={statusChip}>{displayStatus.toUpperCase()}</div>
 
-        {/* Share (native sheet on mobile; copy fallback) */}
         <button style={shareBtn} onClick={onShare} title="Share" aria-label="Share">
           {/* share icon (3 nodes) */}
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -674,7 +694,7 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         </div>
       </div>
 
-      {/* ✅ Progress for active only, summary block for past — same slot height */}
+      {/* Progress for active only, summary block for past — same slot height */}
       <div style={blockSlot}>
         {showProgress && hasMin ? (
           <div style={barWrap}>
@@ -732,27 +752,22 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
 
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" stroke={inkStrong} strokeWidth="2" opacity="0.8" />
-          <path
-            d="M12 7v6l4 2"
-            stroke={inkStrong}
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity="0.85"
-          />
+          <path d="M12 7v6l4 2" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
         </svg>
       </div>
 
-      {/* tiny affordance that the card is clickable */}
-      <div style={affordance} aria-hidden="true">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      {/* click affordance */}
+      <div style={affordance} aria-hidden="true" title="Open raffle">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <path
-            d="M10 7l5 5-5 5"
-            stroke={inkStrong}
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity="0.9"
+            d="M12 2l1.2 4.6L18 8l-4.8 1.4L12 14l-1.2-4.6L6 8l4.8-1.4L12 2Z"
+            fill={inkStrong}
+            opacity="0.7"
+          />
+          <path
+            d="M19 13l.7 2.6L22 16l-2.3.7L19 19l-.7-2.3L16 16l2.3-.4L19 13Z"
+            fill={inkStrong}
+            opacity="0.55"
           />
         </svg>
       </div>
