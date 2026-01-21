@@ -11,14 +11,12 @@ type Props = {
 
 function fmtUsdc(raw: string) {
   try {
-    // USDC uses 6 decimals
     return formatUnits(BigInt(raw || "0"), 6);
   } catch {
     return "0";
   }
 }
 
-// ✅ Live countdown: "Ends in 2d 3h 10m 05s"
 function formatEndsIn(deadlineSeconds: string, nowMs: number) {
   const n = Number(deadlineSeconds);
   if (!Number.isFinite(n) || n <= 0) return "Time unknown";
@@ -29,15 +27,12 @@ function formatEndsIn(deadlineSeconds: string, nowMs: number) {
   if (diffMs <= 0) return "Ended";
 
   const totalSec = Math.floor(diffMs / 1000);
-
   const days = Math.floor(totalSec / 86400);
   const hours = Math.floor((totalSec % 86400) / 3600);
   const minutes = Math.floor((totalSec % 3600) / 60);
   const seconds = totalSec % 60;
 
   const pad2 = (x: number) => String(x).padStart(2, "0");
-
-  // Show days only when >0, but always show h/m/s
   const d = days > 0 ? `${days}d ` : "";
   return `Ends in ${d}${hours}h ${minutes}m ${pad2(seconds)}s`;
 }
@@ -60,11 +55,18 @@ function statusTone(s: string) {
   return "unknown";
 }
 
+function extractMinTickets(raffle: RaffleListItem): string | null {
+  // only show if your list item includes it (some queries don't)
+  const anyR = raffle as any;
+  const v = anyR?.minTickets;
+  if (v === undefined || v === null) return null;
+  const s = String(v);
+  return s && s !== "0" ? s : null;
+}
+
 export function RaffleCard({ raffle, onOpen }: Props) {
-  const [shareOpen, setShareOpen] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
 
-  // ✅ ticking clock (updates the countdown live)
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -77,50 +79,6 @@ export function RaffleCard({ raffle, onOpen }: Props) {
     return u.toString();
   }, [raffle.id]);
 
-  const shareText = useMemo(() => {
-    const name = raffle?.name ? `Join this raffle: ${raffle.name}` : "Join this raffle";
-    return name;
-  }, [raffle?.name]);
-
-  const shareLinks = useMemo(() => {
-    const url = encodeURIComponent(shareUrl);
-    const text = encodeURIComponent(shareText);
-
-    return {
-      x: `https://twitter.com/intent/tweet?url=${url}&text=${text}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}`,
-      telegram: `https://t.me/share/url?url=${url}&text=${text}`,
-      whatsapp: `https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`,
-    };
-  }, [shareUrl, shareText]);
-
-  async function onCopyLink() {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopyMsg("Link copied.");
-
-      // auto-close after short feedback
-      window.setTimeout(() => {
-        setCopyMsg(null);
-        setShareOpen(false);
-      }, 900);
-    } catch {
-      window.prompt("Copy this link:", shareUrl);
-      setCopyMsg("Copy the link.");
-
-      window.setTimeout(() => {
-        setCopyMsg(null);
-        setShareOpen(false);
-      }, 1200);
-    }
-  }
-
-  function openShare(url: string) {
-    window.open(url, "_blank", "noopener,noreferrer");
-    setShareOpen(false);
-  }
-
-  // ---- transparency helpers ----
   const deadlineMs = useMemo(() => {
     const n = Number(raffle.deadline);
     return Number.isFinite(n) ? n * 1000 : 0;
@@ -128,7 +86,6 @@ export function RaffleCard({ raffle, onOpen }: Props) {
 
   const deadlinePassed = deadlineMs > 0 ? nowMs >= deadlineMs : false;
 
-  // If deadline passed but indexer still says OPEN => show Finalizing instead of confusing "Open/Ended"
   const displayStatus = useMemo(() => {
     if (raffle.status === "OPEN" && deadlinePassed) return "Finalizing…";
     return statusLabel(raffle.status);
@@ -136,22 +93,42 @@ export function RaffleCard({ raffle, onOpen }: Props) {
 
   const statusHint = useMemo(() => {
     if (!deadlinePassed) return null;
-
-    if (raffle.status === "OPEN") {
-      return "Deadline passed — finalization is pending.";
-    }
-    if (raffle.status === "DRAWING") {
-      return "Winner selection is in progress.";
-    }
+    if (raffle.status === "OPEN") return "Deadline passed — finalization is pending.";
+    if (raffle.status === "DRAWING") return "Winner selection is in progress.";
     return null;
   }, [deadlinePassed, raffle.status]);
 
   const tone = statusTone(raffle.status);
   const max = raffle.maxTickets !== "0" ? raffle.maxTickets : null;
+  const min = extractMinTickets(raffle);
+
+  async function onShareClick(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const title = raffle?.name ? `Ppopgi — ${raffle.name}` : "Ppopgi raffle";
+    const text = raffle?.name ? `Join this raffle: ${raffle.name}` : "Join this raffle";
+
+    try {
+      // ✅ native share when available (no submenu UI)
+      if ((navigator as any).share) {
+        await (navigator as any).share({ title, text, url: shareUrl });
+        return;
+      }
+
+      // fallback: copy link
+      await navigator.clipboard.writeText(shareUrl);
+      setCopyMsg("Link copied.");
+      window.setTimeout(() => setCopyMsg(null), 900);
+    } catch {
+      // last resort
+      window.prompt("Copy this link:", shareUrl);
+    }
+  }
 
   return (
     <div
-      className={`pp-ticket pp-ticket--${tone}`}
+      className={`pp-ticket2 pp-ticket2--${tone}`}
       role="button"
       tabIndex={0}
       onClick={() => onOpen(raffle.id)}
@@ -160,167 +137,64 @@ export function RaffleCard({ raffle, onOpen }: Props) {
       }}
       title="Open raffle"
     >
-      {/* Top row */}
-      <div className="pp-ticket__top">
-        <div className="pp-ticket__titleWrap">
-          <div className="pp-ticket__title">{raffle.name}</div>
-          <div className={`pp-stamp pp-stamp--${tone}`} aria-label={`Status: ${displayStatus}`}>
-            {displayStatus}
-          </div>
+      {/* header */}
+      <div className="pp-ticket2__header">
+        <div className="pp-ticket2__title" title={raffle.name}>
+          {raffle.name}
         </div>
 
-        {/* Share toggle (must NOT open modal) */}
-        <button
-          className="pp-pillBtn"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setShareOpen((v) => !v);
-          }}
-          aria-expanded={shareOpen}
-          title="Share raffle"
-        >
-          Share
-        </button>
+        <div className="pp-ticket2__headerRight">
+          <div className={`pp-stamp2 pp-stamp2--${tone}`}>{displayStatus}</div>
+
+          <button className="pp-shareBtn2" onClick={onShareClick} title="Share">
+            Share
+          </button>
+        </div>
       </div>
 
-      {/* Main facts */}
-      <div className="pp-ticket__facts">
-        <div className="pp-fact">
-          <div className="pp-fact__label">Prize</div>
-          <div className="pp-fact__value">{fmtUsdc(raffle.winningPot)} USDC</div>
+      {/* prize row (make prize POP) */}
+      <div className="pp-ticket2__prizeRow">
+        <div className="pp-prizeBig">
+          <span className="pp-prizeBig__label">Prize</span>
+          <span className="pp-prizeBig__value">{fmtUsdc(raffle.winningPot)} USDC</span>
         </div>
 
-        <div className="pp-fact">
-          <div className="pp-fact__label">Ticket</div>
-          <div className="pp-fact__value">{fmtUsdc(raffle.ticketPrice)} USDC</div>
+        <div className="pp-miniFacts">
+          <div className="pp-miniFact">
+            <div className="pp-miniFact__k">Ticket</div>
+            <div className="pp-miniFact__v">{fmtUsdc(raffle.ticketPrice)} USDC</div>
+          </div>
+
+          <div className="pp-miniFact">
+            <div className="pp-miniFact__k">Fee</div>
+            <div className="pp-miniFact__v">{raffle.protocolFeePercent}%</div>
+          </div>
+        </div>
+      </div>
+
+      {/* tear line */}
+      <div className="pp-tear2" aria-hidden="true" />
+
+      {/* bottom info */}
+      <div className="pp-ticket2__bottom">
+        <div className="pp-bottomLine">
+          <span className="pp-bottomK">Time</span>
+          <span className="pp-bottomV">{formatEndsIn(raffle.deadline, nowMs)}</span>
         </div>
 
-        <div className="pp-fact">
-          <div className="pp-fact__label">Joined</div>
-          <div className="pp-fact__value">
+        <div className="pp-bottomLine">
+          <span className="pp-bottomK">Tickets</span>
+          <span className="pp-bottomV">
             {raffle.sold}
             {max ? ` / ${max}` : ""}
-          </div>
+            {min ? ` • min ${min}` : ""}
+          </span>
         </div>
 
-        <div className="pp-fact">
-          <div className="pp-fact__label">Time</div>
-          <div className="pp-fact__value">{formatEndsIn(raffle.deadline, nowMs)}</div>
-        </div>
+        {statusHint && <div className="pp-hint2">{statusHint}</div>}
+
+        {copyMsg && <div className="pp-toast2">{copyMsg}</div>}
       </div>
-
-      {/* small hint when deadline passed */}
-      {statusHint && <div className="pp-hint">{statusHint}</div>}
-
-      {/* Tear line */}
-      <div className="pp-tear" aria-hidden="true" />
-
-      {/* Footer */}
-      <div className="pp-ticket__footer">
-        <div className="pp-footerLine">
-          <span className="pp-muted">Ppopgi fee</span>
-          <span className="pp-strong">{raffle.protocolFeePercent}%</span>
-        </div>
-
-        <div className="pp-footerHint">
-          Link format: <span className="pp-mono">?raffle=0x…</span>
-        </div>
-      </div>
-
-      {/* Share panel */}
-      {shareOpen && (
-        <div
-          className="pp-sharePanel"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          role="group"
-          aria-label="Share raffle"
-        >
-          <div className="pp-shareHeader">
-            <div className="pp-muted">Share this raffle</div>
-
-            <button
-              className="pp-pillBtn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setShareOpen(false);
-              }}
-              title="Close share"
-            >
-              Close
-            </button>
-          </div>
-
-          <div className="pp-shareRow">
-            <button
-              className="pp-pillBtn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onCopyLink();
-              }}
-              title="Copy link"
-            >
-              Copy link
-            </button>
-
-            <button
-              className="pp-pillBtn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openShare(shareLinks.x);
-              }}
-              title="Share on X"
-            >
-              X
-            </button>
-
-            <button
-              className="pp-pillBtn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openShare(shareLinks.facebook);
-              }}
-              title="Share on Facebook"
-            >
-              Facebook
-            </button>
-
-            <button
-              className="pp-pillBtn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openShare(shareLinks.telegram);
-              }}
-              title="Share on Telegram"
-            >
-              Telegram
-            </button>
-
-            <button
-              className="pp-pillBtn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openShare(shareLinks.whatsapp);
-              }}
-              title="Share on WhatsApp"
-            >
-              WhatsApp
-            </button>
-          </div>
-
-          {copyMsg && <div className="pp-shareMsg">{copyMsg}</div>}
-        </div>
-      )}
     </div>
   );
 }
