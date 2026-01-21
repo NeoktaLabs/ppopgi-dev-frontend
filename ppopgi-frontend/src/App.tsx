@@ -56,6 +56,11 @@ function setRaffleQuery(id: string | null) {
   }
 }
 
+function num(v: any): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export default function App() {
   const chosenBg = useMemo(pickRandomBg, []);
 
@@ -91,8 +96,7 @@ export default function App() {
     if (page === "dashboard" && !account) setPage("home");
   }, [page, account]);
 
-  // ✅ bigPrizes + endingSoon are already derived from ACTIVE in your hook
-  const { items, bigPrizes, endingSoon, mode, note: homeNote, refetch } = useHomeRaffles();
+  const { items, bigPrizes, endingSoon, note: homeNote, refetch } = useHomeRaffles();
 
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear.");
@@ -151,14 +155,15 @@ export default function App() {
     backgroundSize: "cover",
     backgroundPosition: "center",
     backgroundRepeat: "no-repeat",
+    backgroundAttachment: "fixed",
   };
 
   const overlay: React.CSSProperties = {
     minHeight: "100vh",
     background:
-      "radial-gradient(900px 520px at 15% 10%, rgba(246,182,200,0.18), transparent 60%)," +
-      "radial-gradient(900px 520px at 85% 5%, rgba(169,212,255,0.16), transparent 60%)," +
-      "rgba(255,255,255,0.04)",
+      "radial-gradient(900px 520px at 15% 10%, rgba(246,182,200,0.14), transparent 60%)," +
+      "radial-gradient(900px 520px at 85% 5%, rgba(169,212,255,0.12), transparent 60%)," +
+      "rgba(255,255,255,0.02)",
   };
 
   const container: React.CSSProperties = {
@@ -169,7 +174,7 @@ export default function App() {
 
   const topBtn: React.CSSProperties = {
     border: "1px solid rgba(0,0,0,0.15)",
-    background: "rgba(255,255,255,0.65)",
+    background: "rgba(255,255,255,0.70)",
     borderRadius: 12,
     padding: "8px 10px",
     cursor: "pointer",
@@ -182,31 +187,31 @@ export default function App() {
     border: "1px solid rgba(0,0,0,0.28)",
   };
 
-  // ✅ Stronger section delimitation
+  // ✅ Sections: strong demarcation but still shows your background through
   const sectionCard: React.CSSProperties = {
     marginTop: 18,
     padding: 16,
     borderRadius: 22,
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06))",
-    border: "1px solid rgba(255,255,255,0.22)",
-    boxShadow:
-      "0 18px 44px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.18)",
-    backdropFilter: "blur(10px)",
     position: "relative",
     overflow: "hidden",
+
+    // See-through but NOT “washed out”
+    background: "rgba(255, 247, 251, 0.78)",
+    backdropFilter: "blur(10px)",
+
+    border: "2px solid rgba(242, 166, 198, 0.95)",
+    boxShadow: "0 14px 30px rgba(0,0,0,0.14), inset 0 0 0 2px rgba(255,255,255,0.55)",
   };
 
-  // top accent like a “ticket edge”
   const sectionAccent: React.CSSProperties = {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 10,
-    background:
-      "linear-gradient(90deg, rgba(255,190,215,0.85), rgba(203,183,246,0.70), rgba(255,216,154,0.65))",
-    opacity: 0.85,
+    top: 10,
+    bottom: 10,
+    left: 10,
+    width: 6,
+    borderRadius: 999,
+    background: "linear-gradient(180deg, #FF8DBB, #CBB7F6, #FFD89A)",
+    boxShadow: "0 10px 18px rgba(0,0,0,0.12)",
   };
 
   const sectionTitleRow: React.CSSProperties = {
@@ -215,10 +220,9 @@ export default function App() {
     justifyContent: "space-between",
     gap: 12,
     flexWrap: "wrap",
-    marginBottom: 12,
+    paddingLeft: 16, // space from accent stripe
   };
 
-  // ✅ More visible title pill
   const sectionTitlePill: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
@@ -226,29 +230,53 @@ export default function App() {
     padding: "10px 14px",
     borderRadius: 999,
     fontWeight: 1000 as any,
-    fontSize: 15,
+    fontSize: 16,
     letterSpacing: 0.25,
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.72))",
+    background: "rgba(255,255,255,0.92)",
     border: "1px solid rgba(0,0,0,0.10)",
     color: "#4A0F2B",
-    boxShadow: "0 14px 28px rgba(0,0,0,0.16)",
+    boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
   };
 
   const sectionTitleNotch: React.CSSProperties = {
-    width: 10,
-    height: 10,
+    width: 12,
+    height: 12,
     borderRadius: 999,
-    background: "rgba(255,190,215,0.95)",
-    boxShadow: "0 6px 14px rgba(0,0,0,0.14)",
-    border: "1px solid rgba(0,0,0,0.06)",
+    background: "linear-gradient(135deg, rgba(255,141,187,0.95), rgba(203,183,246,0.95))",
+    boxShadow: "0 6px 12px rgba(0,0,0,0.12)",
+  };
+
+  // ✅ single-row (always) list of 5 cards; scrolls on smaller widths
+  const row5: React.CSSProperties = {
+    marginTop: 12,
+    paddingLeft: 16, // align with title
+    display: "flex",
+    gap: 12,
+    overflowX: "auto",
+    paddingBottom: 8,
+    scrollSnapType: "x mandatory",
+  };
+
+  const row5Item: React.CSSProperties = {
+    scrollSnapAlign: "start",
+    flex: "0 0 auto",
   };
 
   /* ───────────── render helpers ───────────── */
 
-  // Podium (top 3 active by prize) — already active-derived
   const podium = useMemo(() => {
-    const top3 = [...(bigPrizes ?? [])].slice(0, 3);
+    // bigPrizes already = top3 active by prize desc (from hook), but we still map to gold/silver/bronze positions
+    const sorted = [...bigPrizes].sort((a, b) => {
+      try {
+        const A = BigInt(a.winningPot || "0");
+        const B = BigInt(b.winningPot || "0");
+        return A === B ? 0 : A < B ? 1 : -1; // desc
+      } catch {
+        return 0;
+      }
+    });
+
+    const top3 = sorted.slice(0, 3);
     return {
       gold: top3[0] || null,
       silver: top3[1] || null,
@@ -256,28 +284,28 @@ export default function App() {
     };
   }, [bigPrizes]);
 
-  // Ending soon (top 5 OPEN by deadline asc) — already active-derived, keep sorted for safety
   const endingSoonSorted = useMemo(() => {
-    return [...(endingSoon ?? [])]
-      .sort((a, b) => Number(a.deadline || "0") - Number(b.deadline || "0"))
-      .slice(0, 5);
+    // Should remain active only (hook already filters active); keep soonest left
+    return [...endingSoon].sort((a, b) => num(a.deadline) - num(b.deadline));
   }, [endingSoon]);
 
-  // Latest terminated = ANY not OPEN (canceled / completed / drawing / funding_pending etc.)
   const latestTerminated = useMemo(() => {
     const all = items ?? [];
 
-    const ts = (r: any) => {
-      const a = Number(r.completedAt || "0");
-      const b = Number(r.canceledAt || "0");
-      const c = Number(r.lastUpdatedTimestamp || "0");
-      return Math.max(a, b, c);
+    // “Latest terminated raffles” = anything NOT active (not OPEN / not FUNDING_PENDING)
+    const terminated = all.filter((r) => r.status !== "OPEN" && r.status !== "FUNDING_PENDING");
+
+    const sortKey = (r: any) => {
+      // best-effort “most recent” key
+      const finalizedAt = num(r.finalizedAt); // schema has it, your list item may not
+      const completedAt = num(r.completedAt);
+      const canceledAt = num(r.canceledAt);
+      const updated = num(r.lastUpdatedTimestamp);
+
+      return Math.max(finalizedAt, completedAt, canceledAt, updated);
     };
 
-    return [...all]
-      .filter((r) => r.status !== "OPEN")
-      .sort((a, b) => ts(b) - ts(a))
-      .slice(0, 5);
+    return terminated.sort((a: any, b: any) => sortKey(b) - sortKey(a)).slice(0, 5);
   }, [items]);
 
   return (
@@ -326,14 +354,14 @@ export default function App() {
           </div>
 
           {page === "home" && homeNote && (
-            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>{homeNote}</div>
+            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{homeNote}</div>
           )}
-          {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{createdHint}</div>}
+          {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.95 }}>{createdHint}</div>}
 
           {/* HOME */}
           {page === "home" && (
             <>
-              {/* BIG PRIZES (ACTIVE ONLY) */}
+              {/* BIG PRIZES */}
               <div style={sectionCard}>
                 <div style={sectionAccent} />
                 <div style={sectionTitleRow}>
@@ -343,7 +371,14 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pp-podium" style={{ justifyContent: "center" }}>
+                <div
+                  className="pp-podium"
+                  style={{
+                    justifyContent: "center",
+                    paddingLeft: 16,
+                    marginTop: 12,
+                  }}
+                >
                   <div className="pp-podium__silver">
                     {podium.silver ? <RaffleCard raffle={podium.silver} onOpen={openRaffle} ribbon="silver" /> : null}
                   </div>
@@ -356,11 +391,13 @@ export default function App() {
                     {podium.bronze ? <RaffleCard raffle={podium.bronze} onOpen={openRaffle} ribbon="bronze" /> : null}
                   </div>
 
-                  {(bigPrizes?.length ?? 0) === 0 && <div style={{ opacity: 0.9 }}>No open raffles right now.</div>}
+                  {bigPrizes.length === 0 && (
+                    <div style={{ opacity: 0.9, paddingLeft: 16 }}>No active raffles right now.</div>
+                  )}
                 </div>
               </div>
 
-              {/* ENDING SOON (ACTIVE ONLY) */}
+              {/* ENDING SOON */}
               <div style={sectionCard}>
                 <div style={sectionAccent} />
                 <div style={sectionTitleRow}>
@@ -370,15 +407,19 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pp-rowTickets">
+                <div style={row5}>
                   {endingSoonSorted.map((r) => (
-                    <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
+                    <div key={r.id} style={row5Item}>
+                      <RaffleCard raffle={r} onOpen={openRaffle} />
+                    </div>
                   ))}
-                  {endingSoonSorted.length === 0 && <div style={{ opacity: 0.9 }}>Nothing is ending soon.</div>}
+                  {endingSoonSorted.length === 0 && (
+                    <div style={{ opacity: 0.9, paddingLeft: 16 }}>Nothing is ending soon.</div>
+                  )}
                 </div>
               </div>
 
-              {/* LATEST TERMINATED (NOT OPEN) */}
+              {/* LATEST TERMINATED */}
               <div style={sectionCard}>
                 <div style={sectionAccent} />
                 <div style={sectionTitleRow}>
@@ -388,15 +429,14 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pp-rowTickets">
+                <div style={row5}>
                   {latestTerminated.map((r) => (
-                    <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
-                  ))}
-
-                  {latestTerminated.length === 0 && (
-                    <div style={{ opacity: 0.9 }}>
-                      {mode === "live" ? "Live mode may not include past raffles yet." : "No terminated raffles found yet."}
+                    <div key={r.id} style={row5Item}>
+                      <RaffleCard raffle={r} onOpen={openRaffle} />
                     </div>
+                  ))}
+                  {latestTerminated.length === 0 && (
+                    <div style={{ opacity: 0.9, paddingLeft: 16 }}>No terminated raffles to show yet.</div>
                   )}
                 </div>
               </div>
