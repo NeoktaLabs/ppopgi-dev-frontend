@@ -91,7 +91,8 @@ export default function App() {
     if (page === "dashboard" && !account) setPage("home");
   }, [page, account]);
 
-  const { items, bigPrizes, endingSoon, note: homeNote, refetch } = useHomeRaffles();
+  // ✅ we use ALL items to build "terminated" list
+  const { items, bigPrizes, endingSoon, mode, note: homeNote, refetch } = useHomeRaffles();
 
   function onCreatedRaffle() {
     setCreatedHint("Raffle created. It may take a moment to appear.");
@@ -181,16 +182,14 @@ export default function App() {
     border: "1px solid rgba(0,0,0,0.28)",
   };
 
-  // “section” card wrapper (clear separation, matches raffle-card vibe)
+  // Section card style (clear demarcation + matches ticket vibe)
   const sectionCard: React.CSSProperties = {
     marginTop: 18,
-    borderRadius: 22,
-    padding: 16,
-    border: "1px solid rgba(255,255,255,0.62)",
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.50), rgba(255,255,255,0.18) 55%, rgba(255,255,255,0.22))",
-    boxShadow: "0 18px 40px rgba(0,0,0,0.12)",
-    backdropFilter: "blur(12px)",
+    padding: 14,
+    borderRadius: 18,
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    backdropFilter: "blur(8px)",
   };
 
   const sectionTitleRow: React.CSSProperties = {
@@ -198,8 +197,8 @@ export default function App() {
     alignItems: "baseline",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 12,
     flexWrap: "wrap",
+    marginBottom: 10,
   };
 
   const sectionTitlePill: React.CSSProperties = {
@@ -208,49 +207,25 @@ export default function App() {
     gap: 8,
     padding: "8px 12px",
     borderRadius: 999,
-    background: "rgba(255,255,255,0.72)",
-    border: "1px solid rgba(0,0,0,0.06)",
-    color: "#4A0F2B",
     fontWeight: 950,
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
-    fontSize: 12,
+    letterSpacing: 0.2,
+    background: "rgba(255,255,255,0.70)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    color: "#4A0F2B",
   };
 
   const sectionSub: React.CSSProperties = {
     fontSize: 12,
     fontWeight: 800,
-    opacity: 0.78,
-    color: "#4A0F2B",
-    whiteSpace: "nowrap",
-  };
-
-  const homeMeta: React.CSSProperties = {
-    marginTop: 12,
-    fontSize: 13,
     opacity: 0.9,
-    padding: "10px 12px",
-    borderRadius: 14,
-    background: "rgba(255,255,255,0.60)",
-    border: "1px solid rgba(0,0,0,0.06)",
-    backdropFilter: "blur(10px)",
+    color: "rgba(255,255,255,0.88)",
   };
 
   /* ───────────── render helpers ───────────── */
 
+  // ✅ ensure podium uses exactly 3 (already top 3 from hook), but map to gold/silver/bronze positions
   const podium = useMemo(() => {
-    // Sort by winningPot descending (BigInt safe)
-    const sorted = [...bigPrizes].sort((a, b) => {
-      try {
-        const A = BigInt(a.winningPot || "0");
-        const B = BigInt(b.winningPot || "0");
-        return A === B ? 0 : A < B ? 1 : -1; // desc
-      } catch {
-        return 0;
-      }
-    });
-
-    const top3 = sorted.slice(0, 3);
+    const top3 = [...(bigPrizes ?? [])].slice(0, 3);
     return {
       gold: top3[0] || null,
       silver: top3[1] || null,
@@ -258,17 +233,28 @@ export default function App() {
     };
   }, [bigPrizes]);
 
+  // ✅ Ending soon: keep 5, sorted soonest deadline on the left
   const endingSoonSorted = useMemo(() => {
-    // Soonest deadline on the left
-    return [...endingSoon].sort((a, b) => Number(a.deadline || "0") - Number(b.deadline || "0"));
+    return [...(endingSoon ?? [])]
+      .sort((a, b) => Number(a.deadline || "0") - Number(b.deadline || "0"))
+      .slice(0, 5);
   }, [endingSoon]);
 
-  // ✅ NEW: Recently settled (top 5, most recent on the left)
-  const recentlySettled = useMemo(() => {
+  // ✅ Latest terminated: anything NOT OPEN (includes FUNDING_PENDING, DRAWING, COMPLETED, CANCELED)
+  // Sorted by best available "recent activity/finalization" time desc
+  const latestTerminated = useMemo(() => {
     const all = items ?? [];
+
+    const ts = (r: any) => {
+      const a = Number(r.completedAt || "0");
+      const b = Number(r.canceledAt || "0");
+      const c = Number(r.lastUpdatedTimestamp || "0");
+      return Math.max(a, b, c);
+    };
+
     return [...all]
-      .filter((r) => r.status === "COMPLETED")
-      .sort((a, b) => Number(b.completedAt || "0") - Number(a.completedAt || "0"))
+      .filter((r) => r.status !== "OPEN")
+      .sort((a, b) => ts(b) - ts(a))
       .slice(0, 5);
   }, [items]);
 
@@ -317,20 +303,23 @@ export default function App() {
             </div>
           </div>
 
-          {page === "home" && homeNote && <div style={homeMeta}>{homeNote}</div>}
-          {createdHint && <div style={homeMeta}>{createdHint}</div>}
+          {page === "home" && homeNote && (
+            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.88 }}>{homeNote}</div>
+          )}
+          {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{createdHint}</div>}
 
           {/* HOME */}
           {page === "home" && (
             <>
-              {/* Big prizes */}
+              {/* BIG PRIZES */}
               <div style={sectionCard}>
                 <div style={sectionTitleRow}>
                   <div style={sectionTitlePill}>🏆 Big prizes right now</div>
-                  <div style={sectionSub}>Top 3 by prize pool</div>
+                  <div style={sectionSub}>Top 3 active raffles (by prize)</div>
                 </div>
 
-                <div className="pp-podium">
+                {/* ✅ center the 3 podium cards */}
+                <div className="pp-podium" style={{ justifyContent: "center" }}>
                   <div className="pp-podium__silver">
                     {podium.silver ? <RaffleCard raffle={podium.silver} onOpen={openRaffle} ribbon="silver" /> : null}
                   </div>
@@ -343,15 +332,15 @@ export default function App() {
                     {podium.bronze ? <RaffleCard raffle={podium.bronze} onOpen={openRaffle} ribbon="bronze" /> : null}
                   </div>
 
-                  {bigPrizes.length === 0 && <div style={{ opacity: 0.85 }}>No open raffles right now.</div>}
+                  {(bigPrizes?.length ?? 0) === 0 && <div style={{ opacity: 0.85 }}>No open raffles right now.</div>}
                 </div>
               </div>
 
-              {/* Ending soon */}
+              {/* ENDING SOON */}
               <div style={sectionCard}>
                 <div style={sectionTitleRow}>
                   <div style={sectionTitlePill}>⏳ Ending soon</div>
-                  <div style={sectionSub}>Soonest deadlines first</div>
+                  <div style={sectionSub}>Soonest deadline first • 5 max</div>
                 </div>
 
                 <div className="pp-rowTickets">
@@ -362,26 +351,28 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ✅ NEW: Recently finalized (settled) */}
+              {/* LATEST TERMINATED */}
               <div style={sectionCard}>
                 <div style={sectionTitleRow}>
-                  <div style={sectionTitlePill}>✨ Recently settled</div>
-                  <div style={sectionSub}>Latest settlements first</div>
+                  <div style={sectionTitlePill}>🧾 Latest terminated raffles</div>
+                  <div style={sectionSub}>
+                    Not open • most recently updated • 5 max{mode === "live" ? " • limited in live mode" : ""}
+                  </div>
                 </div>
 
                 <div className="pp-rowTickets">
-                  {recentlySettled.map((r) => (
+                  {latestTerminated.map((r) => (
                     <RaffleCard key={r.id} raffle={r} onOpen={openRaffle} />
                   ))}
-                  {recentlySettled.length === 0 && (
-                    <div style={{ opacity: 0.85 }}>No raffles have been settled recently.</div>
+
+                  {latestTerminated.length === 0 && (
+                    <div style={{ opacity: 0.85 }}>
+                      {mode === "live"
+                        ? "Live mode may not include past raffles yet."
+                        : "No terminated raffles found yet."}
+                    </div>
                   )}
                 </div>
-              </div>
-
-              {/* tiny suggestion space (optional / harmless) */}
-              <div style={{ marginTop: 14, fontSize: 12, opacity: 0.78, paddingLeft: 2 }}>
-                Tip: tap any ticket to see details, participants, and history.
               </div>
             </>
           )}
