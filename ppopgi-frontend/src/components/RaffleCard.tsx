@@ -6,6 +6,8 @@ import { formatUnits } from "ethers";
 type Props = {
   raffle: RaffleListItem;
   onOpen: (id: string) => void;
+
+  // Podium styling (top 3 only)
   ribbon?: "gold" | "silver" | "bronze";
 };
 
@@ -45,18 +47,10 @@ function baseStatusLabel(s: string) {
   return "Unknown";
 }
 
-type DisplayStatus =
-  | "Open"
-  | "Finalizing"
-  | "Drawing"
-  | "Settled"
-  | "Canceled"
-  | "Getting ready"
-  | "Unknown";
+type DisplayStatus = "Open" | "Finalizing" | "Drawing" | "Settled" | "Canceled" | "Getting ready" | "Unknown";
 
 function statusTheme(s: DisplayStatus) {
-  if (s === "Open")
-    return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
+  if (s === "Open") return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
   if (s === "Finalizing")
     return { bg: "rgba(255, 120, 140, 0.92)", fg: "#5A0012", border: "1px solid rgba(0,0,0,0.10)", pulse: true };
   if (s === "Drawing")
@@ -70,12 +64,13 @@ function statusTheme(s: DisplayStatus) {
   return { bg: "rgba(255,255,255,0.72)", fg: "#5C2A3E", border: "1px solid rgba(0,0,0,0.08)" };
 }
 
+// Shiny podium “foil” backgrounds (only for top 3 cards)
 function podiumFoil(kind: "gold" | "silver" | "bronze") {
   if (kind === "gold") {
     return {
       bg:
-        "radial-gradient(900px 260px at 20% 15%, rgba(255,255,255,0.85), rgba(255,255,255,0) 55%)," +
-        "radial-gradient(700px 220px at 80% 18%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)," +
+        "radial-gradient(900px 280px at 20% 20%, rgba(255,255,255,0.85), rgba(255,255,255,0) 55%)," +
+        "radial-gradient(700px 240px at 80% 25%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)," +
         "linear-gradient(135deg, rgba(255,216,154,0.98), rgba(255,190,120,0.90) 40%, rgba(255,232,190,0.92))",
       ink: "#4A2A00",
       inkStrong: "#3A1F00",
@@ -85,23 +80,36 @@ function podiumFoil(kind: "gold" | "silver" | "bronze") {
   if (kind === "silver") {
     return {
       bg:
-        "radial-gradient(900px 260px at 20% 15%, rgba(255,255,255,0.85), rgba(255,255,255,0) 55%)," +
-        "radial-gradient(700px 220px at 80% 18%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)," +
+        "radial-gradient(900px 280px at 20% 20%, rgba(255,255,255,0.85), rgba(255,255,255,0) 55%)," +
+        "radial-gradient(700px 240px at 80% 25%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)," +
         "linear-gradient(135deg, rgba(236,241,250,0.98), rgba(218,226,238,0.92) 45%, rgba(245,248,255,0.92))",
       ink: "#1F2A3A",
       inkStrong: "#121B29",
       tear: "rgba(40,60,90,0.40)",
     };
   }
+  // bronze
   return {
     bg:
-      "radial-gradient(900px 260px at 20% 15%, rgba(255,255,255,0.82), rgba(255,255,255,0) 55%)," +
-      "radial-gradient(700px 220px at 80% 18%, rgba(255,255,255,0.52), rgba(255,255,255,0) 60%)," +
+      "radial-gradient(900px 280px at 20% 20%, rgba(255,255,255,0.82), rgba(255,255,255,0) 55%)," +
+      "radial-gradient(700px 240px at 80% 25%, rgba(255,255,255,0.52), rgba(255,255,255,0) 60%)," +
       "linear-gradient(135deg, rgba(246,182,200,0.98), rgba(206,130,105,0.92) 45%, rgba(255,220,205,0.92))",
     ink: "#4A1A12",
     inkStrong: "#35110B",
     tear: "rgba(120,55,40,0.45)",
   };
+}
+
+// helpers for progress
+function clamp01(x: number) {
+  if (!Number.isFinite(x)) return 0;
+  if (x < 0) return 0;
+  if (x > 1) return 1;
+  return x;
+}
+function toNum(v: any): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
@@ -125,18 +133,17 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   async function onShareCopy(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setCopyMsg("Link copied");
+      setCopyMsg("Link copied.");
     } catch {
       window.prompt("Copy this link:", shareUrl);
-      setCopyMsg("Copy the link");
+      setCopyMsg("Copy the link.");
     }
-
-    window.setTimeout(() => setCopyMsg(null), 1200);
+    window.setTimeout(() => setCopyMsg(null), 1100);
   }
 
+  // one user-facing status
   const deadlineMs = useMemo(() => {
     const n = Number(raffle.deadline);
     return Number.isFinite(n) ? n * 1000 : 0;
@@ -149,36 +156,41 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     return baseStatusLabel(raffle.status) as DisplayStatus;
   }, [raffle.status, deadlinePassed]);
 
+  // “bottom line” should be short and friendly
   const bottomLine = useMemo(() => {
-    if (displayStatus === "Open" || displayStatus === "Getting ready") return `Ends in ${formatEndsIn(raffle.deadline, nowMs)}`;
-    if (displayStatus === "Finalizing" || displayStatus === "Drawing") return "Draw in progress";
+    if (displayStatus === "Open" || displayStatus === "Getting ready") return formatEndsIn(raffle.deadline, nowMs);
+    if (displayStatus === "Finalizing") return "Draw in progress";
+    if (displayStatus === "Drawing") return "Draw in progress";
     if (displayStatus === "Settled") return "Settled";
     if (displayStatus === "Canceled") return "Canceled";
     return "Unknown";
   }, [displayStatus, raffle.deadline, nowMs]);
 
-  const soldNum = useMemo(() => Number(raffle.sold || "0") || 0, [raffle.sold]);
-  const maxNum = useMemo(() => Number(raffle.maxTickets || "0") || 0, [raffle.maxTickets]);
-  const soldLine = useMemo(() => (maxNum > 0 ? `${soldNum} / ${maxNum}` : `${soldNum}`), [soldNum, maxNum]);
+  // numbers
+  const anyRaffle = raffle as any;
+  const soldN = useMemo(() => toNum(raffle.sold ?? "0"), [raffle.sold]);
+  const minN = useMemo(() => toNum(anyRaffle?.minTickets ?? 0), [anyRaffle?.minTickets]);
+  const maxN = useMemo(() => toNum(raffle.maxTickets ?? anyRaffle?.maxTickets ?? "0"), [raffle.maxTickets, anyRaffle?.maxTickets]);
 
-  const soldPct = useMemo(() => {
-    if (!maxNum) return null;
-    const p = Math.max(0, Math.min(100, Math.round((soldNum / maxNum) * 100)));
-    return p;
-  }, [soldNum, maxNum]);
+  const hasMin = minN > 0;
+  const hasMax = maxN > 0;
 
-  const minTickets = useMemo(() => {
-    const anyRaffle = raffle as any;
-    const v = anyRaffle?.minTickets;
-    if (v === undefined || v === null || v === "") return null;
-    return String(v);
-  }, [raffle]);
+  const minReached = hasMin ? soldN >= minN : false;
+
+  const minProgress = hasMin ? clamp01(soldN / minN) : 0;
+  const maxProgress = hasMax ? clamp01(soldN / maxN) : 0;
+
+  const soldLine = useMemo(() => {
+    if (hasMax) return `${soldN} / ${maxN}`;
+    return `${soldN}`;
+  }, [soldN, hasMax, maxN]);
 
   const maxTicketsText = useMemo(() => {
-    if (!maxNum) return "No limit";
-    return String(maxNum);
-  }, [maxNum]);
+    if (!hasMax) return "∞";
+    return String(maxN);
+  }, [hasMax, maxN]);
 
+  // style palette
   const baseInk = "#5C1F3B";
   const baseInkStrong = "#4A0F2B";
   const foil = ribbon ? podiumFoil(ribbon) : null;
@@ -188,25 +200,24 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
 
   const status = statusTheme(displayStatus);
 
-  // ✅ ~30% smaller overall
   const card: React.CSSProperties = {
     position: "relative",
     width: "100%",
-    maxWidth: 240,
-    borderRadius: 20,
-    padding: 12,
+    maxWidth: 340,
+    borderRadius: 22,
+    padding: 16,
     cursor: "pointer",
     userSelect: "none",
     overflow: "hidden",
 
     background:
       foil?.bg ??
-      "linear-gradient(180deg, rgba(255,190,215,0.94), rgba(255,210,230,0.82) 42%, rgba(255,235,246,0.86))",
+      "linear-gradient(180deg, rgba(255,190,215,0.92), rgba(255,210,230,0.78) 42%, rgba(255,235,246,0.82))",
 
-    border: "1px solid rgba(255,255,255,0.80)",
-    boxShadow: isHover ? "0 18px 36px rgba(0,0,0,0.16)" : "0 12px 28px rgba(0,0,0,0.13)",
+    border: "1px solid rgba(255,255,255,0.78)",
+    boxShadow: isHover ? "0 22px 46px rgba(0,0,0,0.18)" : "0 16px 34px rgba(0,0,0,0.14)",
     backdropFilter: "blur(14px)",
-    transform: isHover ? "translateY(-3px)" : "translateY(0)",
+    transform: isHover ? "translateY(-4px)" : "translateY(0)",
     transition: "transform 140ms ease, box-shadow 140ms ease",
   };
 
@@ -214,23 +225,23 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     position: "absolute",
     top: "52%",
     transform: "translateY(-50%)",
-    width: 16,
-    height: 16,
+    width: 18,
+    height: 18,
     borderRadius: 999,
-    background: "rgba(255,255,255,0.66)",
+    background: "rgba(255,255,255,0.62)",
     border: "1px solid rgba(0,0,0,0.06)",
     boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.14)",
     pointerEvents: "none",
   };
 
   const tearLine: React.CSSProperties = {
-    marginTop: 10,
+    marginTop: 14,
     height: 1,
     background:
       "repeating-linear-gradient(90deg, " +
       `${foil?.tear ?? "rgba(180,70,120,0.62)"} , ${foil?.tear ?? "rgba(180,70,120,0.62)"} 7px,` +
       " rgba(0,0,0,0) 7px, rgba(0,0,0,0) 14px)",
-    opacity: 0.82,
+    opacity: 0.8,
     pointerEvents: "none",
   };
 
@@ -238,13 +249,13 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 8,
+    gap: 10,
   };
 
   const statusChip: React.CSSProperties = {
-    padding: "5px 9px",
+    padding: "6px 10px",
     borderRadius: 999,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 950,
     letterSpacing: 0.35,
     whiteSpace: "nowrap",
@@ -256,49 +267,31 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const shareBtn: React.CSSProperties = {
-    width: 30,
-    height: 30,
+    width: 34,
+    height: 34,
     borderRadius: 12,
-    background: "rgba(255,255,255,0.86)",
+    background: "rgba(255,255,255,0.82)",
     border: "1px solid rgba(0,0,0,0.08)",
     display: "grid",
     placeItems: "center",
     cursor: "pointer",
   };
 
-  const toast: React.CSSProperties = {
-    position: "absolute",
-    top: 10,
-    left: "50%",
-    transform: "translateX(-50%)",
-    zIndex: 5,
-    padding: "6px 10px",
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.92)",
-    border: "1px solid rgba(0,0,0,0.10)",
-    boxShadow: "0 14px 26px rgba(0,0,0,0.14)",
-    color: inkStrong,
-    fontSize: 12,
-    fontWeight: 950,
-    letterSpacing: 0.2,
-    pointerEvents: "none",
-  };
-
   const titleWrap: React.CSSProperties = {
-    marginTop: 8,
+    marginTop: 10,
     textAlign: "center",
   };
 
   const smallKicker: React.CSSProperties = {
-    fontSize: 11,
-    fontWeight: 850,
-    opacity: 0.92,
+    fontSize: 12,
+    fontWeight: 800,
+    opacity: 0.9,
     color: ink,
   };
 
   const titleText: React.CSSProperties = {
     marginTop: 4,
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: 950,
     letterSpacing: 0.1,
     lineHeight: 1.15,
@@ -306,8 +299,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const prizeKicker: React.CSSProperties = {
-    marginTop: 10,
-    fontSize: 11,
+    marginTop: 14,
+    fontSize: 12,
     fontWeight: 950,
     letterSpacing: 0.45,
     textTransform: "uppercase",
@@ -317,8 +310,8 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const prizeValue: React.CSSProperties = {
-    marginTop: 6,
-    fontSize: 26,
+    marginTop: 8,
+    fontSize: 34,
     fontWeight: 1000 as any,
     lineHeight: 1.0,
     letterSpacing: 0.2,
@@ -328,21 +321,21 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const midGrid: React.CSSProperties = {
-    marginTop: 12,
+    marginTop: 16,
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: 10,
+    gap: 12,
   };
 
   const mini: React.CSSProperties = {
     borderRadius: 14,
-    padding: 10,
-    background: "rgba(255,255,255,0.58)",
+    padding: 12,
+    background: "rgba(255,255,255,0.56)",
     border: "1px solid rgba(0,0,0,0.06)",
   };
 
   const miniLabel: React.CSSProperties = {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 950,
     letterSpacing: 0.25,
     opacity: 0.9,
@@ -350,49 +343,80 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const miniValue: React.CSSProperties = {
-    marginTop: 5,
-    fontSize: 13,
+    marginTop: 6,
+    fontSize: 14,
     fontWeight: 950,
     color: inkStrong,
   };
 
   const hint: React.CSSProperties = {
-    marginTop: 3,
-    fontSize: 10.5,
-    fontWeight: 850,
-    opacity: 0.9,
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: 800,
+    opacity: 0.88,
     color: ink,
   };
 
-  const progressWrap: React.CSSProperties = { marginTop: 10 };
+  const barWrap: React.CSSProperties = {
+    marginTop: 12,
+    display: "grid",
+    gap: 8,
+  };
 
-  const progressBar: React.CSSProperties = {
-    height: 9,
+  const barLabelRow: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: 10,
+  };
+
+  const barTrack: React.CSSProperties = {
+    height: 10,
     borderRadius: 999,
     background: "rgba(0,0,0,0.10)",
     overflow: "hidden",
+    boxShadow: "inset 0 1px 2px rgba(0,0,0,0.10)",
   };
 
-  const progressFill: React.CSSProperties = {
+  const barFillBase: React.CSSProperties = {
     height: "100%",
-    width: `${soldPct ?? 0}%`,
     borderRadius: 999,
-    background: "linear-gradient(90deg, rgba(246,182,200,0.98), rgba(203,183,246,0.92))",
+    transition: "width 220ms ease",
   };
 
-  const progressMeta: React.CSSProperties = {
-    marginTop: 8,
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 10,
+  const barFillPending: React.CSSProperties = {
+    ...barFillBase,
+    background: "linear-gradient(90deg, rgba(59,130,246,0.95), rgba(169,212,255,0.95))",
+  };
+
+  const barFillMin: React.CSSProperties = {
+    ...barFillBase,
+    background: "linear-gradient(90deg, rgba(34,197,94,0.95), rgba(145,247,184,0.95))",
+  };
+
+  const barFillMax: React.CSSProperties = {
+    ...barFillBase,
+    background: "linear-gradient(90deg, rgba(168,85,247,0.95), rgba(203,183,246,0.95))",
+  };
+
+  const barFillInfinite: React.CSSProperties = {
+    ...barFillBase,
+    width: "100%",
+    background:
+      "repeating-linear-gradient(45deg, rgba(168,85,247,0.95), rgba(168,85,247,0.95) 10px, rgba(168,85,247,0.55) 10px, rgba(168,85,247,0.55) 20px)",
+    opacity: 0.85,
+  };
+
+  const smallHint: React.CSSProperties = {
     fontSize: 11,
-    fontWeight: 950,
+    fontWeight: 900,
     color: ink,
+    opacity: 0.92,
   };
 
   const bottomRow: React.CSSProperties = {
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: 14,
+    paddingTop: 12,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
@@ -400,10 +424,19 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
   };
 
   const bottomText: React.CSSProperties = {
-    fontSize: 12.5,
+    fontSize: 14,
     fontWeight: 950,
     color: inkStrong,
     letterSpacing: 0.2,
+  };
+
+  const copyToast: React.CSSProperties = {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: 950,
+    color: ink,
+    opacity: 0.95,
+    textAlign: "center",
   };
 
   return (
@@ -429,10 +462,9 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         `}
       </style>
 
-      {copyMsg && <div style={toast}>{copyMsg}</div>}
-
-      <div style={{ ...notch, left: -8 }} />
-      <div style={{ ...notch, right: -8 }} />
+      {/* Ticket notches */}
+      <div style={{ ...notch, left: -9 }} />
+      <div style={{ ...notch, right: -9 }} />
 
       <div style={topRow}>
         <div style={statusChip}>{displayStatus.toUpperCase()}</div>
@@ -470,46 +502,70 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
         </div>
 
         <div style={mini}>
-          <div style={miniLabel}>Min tickets</div>
-          <div style={miniValue}>{minTickets ?? "—"}</div>
-          <div style={hint}>Draw is only possible after this is reached</div>
-        </div>
-      </div>
-
-      <div style={{ ...midGrid, marginTop: 10 }}>
-        <div style={mini}>
-          <div style={miniLabel}>Tickets</div>
+          <div style={miniLabel}>Tickets sold</div>
           <div style={miniValue}>{soldLine}</div>
-        </div>
-
-        <div style={mini}>
-          <div style={miniLabel}>Max tickets</div>
-          <div style={miniValue}>{maxTicketsText}</div>
+          <div style={hint}>{hasMax ? `Max: ${maxTicketsText}` : "No max limit"}</div>
         </div>
       </div>
 
-      <div style={progressWrap}>
-        {soldPct !== null ? (
-          <>
-            <div style={progressBar}>
-              <div style={progressFill} />
-            </div>
-            <div style={progressMeta}>
-              <div>{soldPct}% sold</div>
-              <div>{soldLine}</div>
-            </div>
-          </>
-        ) : null}
-      </div>
+      {/* ✅ NEW: min/max progress bars */}
+      {hasMin ? (
+        <div style={barWrap}>
+          {!minReached ? (
+            <>
+              <div style={barLabelRow}>
+                <span style={miniLabel}>Minimum needed</span>
+                <span style={smallHint}>
+                  {soldN} / {minN}
+                </span>
+              </div>
+              <div style={barTrack}>
+                <div style={{ ...barFillPending, width: `${Math.round(minProgress * 100)}%` }} />
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.88, color: ink }}>
+                This minimum must be reached before the draw step can happen.
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={barLabelRow}>
+                <span style={miniLabel}>Minimum reached</span>
+                <span style={smallHint}>{soldN} sold</span>
+              </div>
+              <div style={barTrack}>
+                <div style={{ ...barFillMin, width: "100%" }} />
+              </div>
+
+              <div style={barLabelRow}>
+                <span style={miniLabel}>Tickets</span>
+                <span style={smallHint}>
+                  {hasMax ? `${soldN} / ${maxN}` : `${soldN} / ∞`}
+                </span>
+              </div>
+              <div style={barTrack}>
+                {hasMax ? (
+                  <div style={{ ...barFillMax, width: `${Math.round(maxProgress * 100)}%` }} />
+                ) : (
+                  <div style={barFillInfinite} />
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
 
       <div style={bottomRow}>
-        <div style={bottomText}>{bottomLine}</div>
+        <div style={bottomText}>
+          {displayStatus === "Open" || displayStatus === "Getting ready" ? `Ends in ${bottomLine}` : bottomLine}
+        </div>
 
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" stroke={inkStrong} strokeWidth="2" opacity="0.8" />
           <path d="M12 7v6l4 2" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
         </svg>
       </div>
+
+      {copyMsg && <div style={copyToast}>{copyMsg}</div>}
     </div>
   );
 }
