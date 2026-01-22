@@ -201,7 +201,7 @@ export default function App() {
       "radial-gradient(900px 240px at 10% 0%, rgba(255,141,187,0.10), rgba(255,141,187,0) 55%)," +
       "radial-gradient(900px 240px at 90% 0%, rgba(203,183,246,0.10), rgba(203,183,246,0) 55%)",
 
-    backdropFilter: "blur(7px)",
+    backdropFilter: "blur(3px)",
 
     border: "2px solid rgba(255,255,255,0.55)",
     boxShadow: "0 18px 40px rgba(0,0,0,0.16)",
