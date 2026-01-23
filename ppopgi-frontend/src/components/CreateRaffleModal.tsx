@@ -53,6 +53,7 @@ function isHexAddress(a: string) {
   return /^0x[0-9a-fA-F]{40}$/.test(a);
 }
 
+// Deployer event (to extract raffle address)
 const DEPLOYER_EVENT_ABI = [
   "event LotteryDeployed(address indexed lottery,address indexed creator,uint256 winningPot,uint256 ticketPrice,string name,address usdc,address entropy,address entropyProvider,uint32 callbackGasLimit,address feeRecipient,uint256 protocolFeePercent,uint64 deadline,uint64 minTickets,uint64 maxTickets)",
 ];
@@ -83,13 +84,10 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const [createdRaffleId, setCreatedRaffleId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // --- Allowance/balance state ---
+  // --- allowance/balance ---
   const [usdcBal, setUsdcBal] = useState<bigint | null>(null);
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [allowLoading, setAllowLoading] = useState(false);
-
-  // Optional: hide confusing numbers behind a “Details” toggle
-  const [showDetails, setShowDetails] = useState(false);
 
   const deployer = useMemo(
     () =>
@@ -211,7 +209,6 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     setMsg(null);
     setCreatedRaffleId(null);
     setCopied(false);
-    setShowDetails(false);
     setAdvancedOpen(false);
   }, [open]);
 
@@ -229,7 +226,6 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     if (requiredAllowanceU <= 0n) return setMsg("Enter a winning pot first.");
 
     try {
-      // Approve exactly the pot amount (simple + least confusing)
       const tx = prepareContractCall({
         contract: usdcContract,
         method: "function approve(address spender,uint256 amount) returns (bool)",
@@ -284,7 +280,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     if (!minPurchaseOk) return setMsg("Min purchase must be ≤ max tickets (or keep max unlimited).");
     if (requiredAllowanceU <= 0n) return setMsg("Winning pot must be greater than 0.");
     if (!hasEnoughBalance) return setMsg("Not enough USDC for the winning pot deposit.");
-    if (!hasEnoughAllowance) return setMsg("Step 1 is required: set prize deposit permission.");
+    if (!hasEnoughAllowance) return setMsg("Step 1 is required: enable prize deposit.");
 
     try {
       const durationSeconds = BigInt(durationSecondsN);
@@ -385,13 +381,11 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   if (!open) return null;
 
-  const isNarrow = typeof window !== "undefined" ? window.innerWidth < 900 : false;
-
-  // --------- CLEAN WHITE UI STYLES ----------
+  // ---------- Premium UI styles ----------
   const overlay: React.CSSProperties = {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.55)",
+    background: "rgba(2, 6, 23, 0.6)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -400,32 +394,32 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   };
 
   const modal: React.CSSProperties = {
-    width: "min(1020px, 100%)",
+    width: "min(1060px, 100%)",
     maxHeight: "calc(100vh - 32px)",
-    background: "#FFFFFF",
-    color: "#0F172A",
+    background: "#ffffff",
+    color: "#0f172a",
     borderRadius: 20,
-    border: "1px solid rgba(15, 23, 42, 0.08)",
-    boxShadow: "0 30px 80px rgba(0,0,0,0.35)",
+    border: "1px solid rgba(15, 23, 42, 0.10)",
+    boxShadow: "0 35px 100px rgba(0,0,0,0.45)",
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
   };
 
   const header: React.CSSProperties = {
-    padding: "16px 18px",
-    borderBottom: "1px solid rgba(15, 23, 42, 0.08)",
+    padding: "18px 20px",
+    borderBottom: "1px solid rgba(15, 23, 42, 0.10)",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 14,
+    gap: 16,
   };
 
   const title: React.CSSProperties = {
+    margin: 0,
     fontSize: 20,
     fontWeight: 1000,
     letterSpacing: -0.2,
-    margin: 0,
   };
 
   const subtitle: React.CSSProperties = {
@@ -433,16 +427,16 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     fontSize: 13,
     color: "rgba(15, 23, 42, 0.70)",
     lineHeight: 1.35,
+    maxWidth: 520,
   };
 
   const tag: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
-    gap: 8,
     borderRadius: 999,
     padding: "6px 10px",
     background: "rgba(2, 6, 23, 0.04)",
-    border: "1px solid rgba(2, 6, 23, 0.08)",
+    border: "1px solid rgba(2, 6, 23, 0.10)",
     fontSize: 12,
     fontWeight: 900,
     color: "rgba(15, 23, 42, 0.80)",
@@ -451,12 +445,12 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   const closeBtn: React.CSSProperties = {
     borderRadius: 12,
-    border: "1px solid rgba(15, 23, 42, 0.10)",
+    border: "1px solid rgba(15, 23, 42, 0.14)",
     background: "rgba(15, 23, 42, 0.04)",
     padding: "10px 12px",
     cursor: "pointer",
-    fontWeight: 900,
-    color: "#0F172A",
+    fontWeight: 950,
+    color: "#0f172a",
     whiteSpace: "nowrap",
   };
 
@@ -465,79 +459,98 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     overflowY: "auto",
   };
 
-  const layout: React.CSSProperties = isNarrow
-    ? { display: "grid", gridTemplateColumns: "1fr", gap: 14 }
-    : { display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 14 };
+  const layout: React.CSSProperties =
+    typeof window !== "undefined" && window.innerWidth < 980
+      ? { display: "grid", gridTemplateColumns: "1fr", gap: 14 }
+      : { display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 14 };
 
-  const panel: React.CSSProperties = {
+  const section: React.CSSProperties = {
+    background: "#ffffff",
+    border: "1px solid rgba(15, 23, 42, 0.10)",
     borderRadius: 16,
-    border: "1px solid rgba(15, 23, 42, 0.08)",
-    background: "rgba(15, 23, 42, 0.02)",
-    padding: 14,
+    boxShadow: "0 10px 30px rgba(2,6,23,0.06)",
+    overflow: "hidden",
   };
 
-  const panelTitleRow: React.CSSProperties = {
+  const sectionHead: React.CSSProperties = {
+    padding: "14px 14px",
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "baseline",
+    alignItems: "center",
     gap: 12,
+    borderBottom: "1px solid rgba(15, 23, 42, 0.08)",
+    background: "rgba(2, 6, 23, 0.02)",
   };
 
-  const panelTitle: React.CSSProperties = {
+  const sectionTitle: React.CSSProperties = {
     margin: 0,
     fontSize: 14,
     fontWeight: 1000,
     letterSpacing: -0.1,
   };
 
-  const panelHint: React.CSSProperties = {
-    marginTop: 8,
-    fontSize: 12,
-    color: "rgba(15, 23, 42, 0.65)",
+  const sectionBody: React.CSSProperties = {
+    padding: 14,
+    display: "grid",
+    gap: 12,
   };
 
   const label: React.CSSProperties = {
-    marginTop: 12,
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 950,
     color: "rgba(15, 23, 42, 0.80)",
   };
 
-  const input: React.CSSProperties = {
+  const fieldHint: React.CSSProperties = {
+    marginTop: 6,
+    fontSize: 12,
+    color: "rgba(15, 23, 42, 0.62)",
+    lineHeight: 1.35,
+  };
+
+  const controlBase: React.CSSProperties = {
     marginTop: 8,
     width: "100%",
     borderRadius: 12,
-    border: "1px solid rgba(15, 23, 42, 0.12)",
-    background: "#FFFFFF",
+    border: "1px solid rgba(15, 23, 42, 0.14)",
+    background: "#ffffff",
     padding: "11px 12px",
+    height: 44,
+    lineHeight: "22px",
     outline: "none",
     fontWeight: 850,
-    color: "#0F172A",
+    color: "#0f172a",
   };
 
-  const select: React.CSSProperties = {
-    ...input,
-    cursor: "pointer",
+  const input = controlBase;
+  const select = { ...controlBase, cursor: "pointer", paddingRight: 34 } as React.CSSProperties;
+
+  const formGrid: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
   };
 
-  const grid2: React.CSSProperties = {
+  const durationGrid: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: 10,
-    marginTop: 10,
   };
 
-  const grid3: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "1.2fr 1fr 1fr",
-    gap: 10,
-    marginTop: 10,
+  const chipsRow: React.CSSProperties = {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
   };
 
-  const steps: React.CSSProperties = {
-    marginTop: 12,
-    display: "grid",
-    gap: 10,
+  const chip: React.CSSProperties = {
+    borderRadius: 999,
+    padding: "6px 10px",
+    border: "1px solid rgba(15, 23, 42, 0.10)",
+    background: "rgba(2, 6, 23, 0.03)",
+    fontSize: 12,
+    fontWeight: 950,
+    color: "rgba(15, 23, 42, 0.78)",
   };
 
   const btnBase: React.CSSProperties = {
@@ -545,52 +558,35 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     borderRadius: 14,
     padding: "12px 14px",
     fontWeight: 1000,
-    border: "1px solid rgba(15, 23, 42, 0.12)",
+    border: "1px solid rgba(15, 23, 42, 0.14)",
   };
 
   const btnPrimary: React.CSSProperties = {
     ...btnBase,
     cursor: "pointer",
-    background: "#0F172A",
-    color: "#FFFFFF",
-    border: "1px solid rgba(15, 23, 42, 0.12)",
+    background: "#0f172a",
+    color: "#ffffff",
   };
 
   const btnSoft: React.CSSProperties = {
     ...btnBase,
     cursor: "pointer",
-    background: "rgba(15, 23, 42, 0.05)",
-    color: "#0F172A",
+    background: "rgba(15, 23, 42, 0.04)",
+    color: "#0f172a",
   };
 
   const btnDisabled: React.CSSProperties = {
     ...btnBase,
     cursor: "not-allowed",
-    opacity: 0.55,
-    background: "rgba(15, 23, 42, 0.04)",
+    opacity: 0.6,
+    background: "rgba(15, 23, 42, 0.03)",
     color: "rgba(15, 23, 42, 0.70)",
   };
 
-  const statusRow: React.CSSProperties = {
-    marginTop: 12,
-    display: "flex",
-    gap: 10,
-    flexWrap: "wrap",
-  };
-
-  const statusChip: React.CSSProperties = {
-    borderRadius: 999,
-    padding: "6px 10px",
-    border: "1px solid rgba(15, 23, 42, 0.10)",
-    background: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: 900,
-    color: "rgba(15, 23, 42, 0.78)",
-  };
-
-  const previewWrap: React.CSSProperties = isNarrow
-    ? {}
-    : { position: "sticky", top: 12, alignSelf: "start" };
+  const stickyPreview: React.CSSProperties =
+    typeof window !== "undefined" && window.innerWidth >= 980
+      ? { position: "sticky", top: 12, alignSelf: "start" }
+      : {};
 
   return (
     <div style={overlay} onMouseDown={onClose}>
@@ -600,7 +596,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
             <div style={tag}>Network: {ETHERLINK_MAINNET.chainName}</div>
             <h2 style={title}>Create a raffle</h2>
             <div style={subtitle}>
-              Two quick steps. You’ll confirm everything in your wallet.
+              Step 1 enables the prize deposit. Step 2 launches your raffle. You confirm both in your wallet.
             </div>
           </div>
 
@@ -611,75 +607,91 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
         <div style={body}>
           <div style={layout}>
-            {/* LEFT */}
-            <div style={{ minWidth: 0, display: "grid", gap: 12 }}>
+            {/* LEFT COLUMN */}
+            <div style={{ minWidth: 0, display: "grid", gap: 14 }}>
               {/* Network settings */}
-              <div style={panel}>
-                <div style={panelTitleRow}>
-                  <h3 style={panelTitle}>Network settings</h3>
-                  <span style={statusChip}>{loading ? "Loading…" : data ? "Up to date" : "Unavailable"}</span>
+              <div style={section}>
+                <div style={sectionHead}>
+                  <h3 style={sectionTitle}>Network settings</h3>
+                  <span style={chip}>{loading ? "Loading…" : data ? "Up to date" : "Unavailable"}</span>
                 </div>
 
-                {note && <div style={{ marginTop: 10, fontSize: 13, color: "rgba(15, 23, 42, 0.75)" }}>{note}</div>}
+                <div style={sectionBody}>
+                  {note && <div style={{ fontSize: 13, color: "rgba(15, 23, 42, 0.75)" }}>{note}</div>}
 
-                <div style={{ marginTop: 10, display: "grid", gap: 8, fontSize: 13, color: "rgba(15, 23, 42, 0.78)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <span>Ppopgi fee</span>
-                    <b style={{ color: "#0F172A" }}>{data ? `${data.protocolFeePercent}%` : "—"}</b>
+                  <div style={{ display: "grid", gap: 8, fontSize: 13, color: "rgba(15, 23, 42, 0.80)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span>Ppopgi fee</span>
+                      <b style={{ color: "#0f172a" }}>{data ? `${data.protocolFeePercent}%` : "—"}</b>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span>Fee receiver</span>
+                      <b style={{ color: "#0f172a" }}>{data ? short(data.feeRecipient) : "—"}</b>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span>USDC contract</span>
+                      <b style={{ color: "#0f172a" }}>{data ? short(data.usdc) : "—"}</b>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <span>Fee receiver</span>
-                    <b style={{ color: "#0F172A" }}>{data ? short(data.feeRecipient) : "—"}</b>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <span>USDC contract</span>
-                    <b style={{ color: "#0F172A" }}>{data ? short(data.usdc) : "—"}</b>
-                  </div>
+
+                  <div style={fieldHint}>These are read from the blockchain and can’t be changed.</div>
                 </div>
-
-                <div style={panelHint}>These come from the blockchain and can’t be changed by the app.</div>
               </div>
 
-              {/* Details */}
-              <div style={panel}>
-                <div style={panelTitleRow}>
-                  <h3 style={panelTitle}>Raffle details</h3>
-                  <button style={btnSoft} onClick={() => setShowDetails((v) => !v)} type="button">
-                    {showDetails ? "Hide details" : "Show details"}
+              {/* Raffle details */}
+              <div style={section}>
+                <div style={sectionHead}>
+                  <h3 style={sectionTitle}>Raffle details</h3>
+                  <button style={btnSoft} onClick={() => setAdvancedOpen((v) => !v)} type="button">
+                    {advancedOpen ? "Hide advanced" : "Show advanced"}
                   </button>
                 </div>
 
-                <div style={label}>Name</div>
-                <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ppopgi #12" />
-
-                <div style={grid3}>
+                <div style={sectionBody}>
+                  {/* Name */}
                   <div>
-                    <div style={label}>Ticket price (USDC)</div>
+                    <div style={label}>Name</div>
                     <input
                       style={input}
-                      value={ticketPrice}
-                      onChange={(e) => setTicketPrice(sanitizeIntInput(e.target.value))}
-                      inputMode="numeric"
-                      placeholder="1"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Ppopgi #12"
                     />
-                    <div style={panelHint}>Whole numbers only.</div>
                   </div>
 
-                  <div>
-                    <div style={label}>Winning pot (USDC)</div>
-                    <input
-                      style={input}
-                      value={winningPot}
-                      onChange={(e) => setWinningPot(sanitizeIntInput(e.target.value))}
-                      inputMode="numeric"
-                      placeholder="100"
-                    />
-                    <div style={panelHint}>Deposited when launching.</div>
+                  {/* Price + Pot */}
+                  <div style={formGrid}>
+                    <div>
+                      <div style={label}>Ticket price (USDC)</div>
+                      <input
+                        style={input}
+                        value={ticketPrice}
+                        onChange={(e) => setTicketPrice(sanitizeIntInput(e.target.value))}
+                        inputMode="numeric"
+                        placeholder="1"
+                      />
+                      <div style={fieldHint}>Whole numbers only.</div>
+                    </div>
+
+                    <div>
+                      <div style={label}>Winning pot (USDC)</div>
+                      <input
+                        style={input}
+                        value={winningPot}
+                        onChange={(e) => setWinningPot(sanitizeIntInput(e.target.value))}
+                        inputMode="numeric"
+                        placeholder="100"
+                      />
+                      <div style={fieldHint}>Deposited when launching.</div>
+                    </div>
                   </div>
 
+                  {/* Duration (compact, not full width waste) */}
                   <div>
                     <div style={label}>Duration</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+                    <div style={{ ...durationGrid, marginTop: 8 }}>
                       <input
                         style={input}
                         value={durationValue}
@@ -687,148 +699,153 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                         inputMode="numeric"
                         placeholder="24"
                       />
-                      <select style={select} value={durationUnit} onChange={(e) => setDurationUnit(e.target.value as any)}>
-                        <option value="minutes">min</option>
-                        <option value="hours">hours</option>
-                        <option value="days">days</option>
+                      <select
+                        style={select}
+                        value={durationUnit}
+                        onChange={(e) => setDurationUnit(e.target.value as any)}
+                      >
+                        <option value="minutes">Minutes</option>
+                        <option value="hours">Hours</option>
+                        <option value="days">Days</option>
                       </select>
                     </div>
-                    <div style={panelHint}>{durationHint}</div>
+                    <div style={fieldHint}>{durationHint}</div>
                   </div>
-                </div>
 
-                <button style={btnSoft} onClick={() => setAdvancedOpen((v) => !v)} type="button">
-                  {advancedOpen ? "Hide advanced options" : "Show advanced options"}
-                </button>
+                  {/* Advanced */}
+                  {advancedOpen && (
+                    <div style={{ display: "grid", gap: 12, paddingTop: 2 }}>
+                      <div style={formGrid}>
+                        <div>
+                          <div style={label}>Min tickets</div>
+                          <input
+                            style={input}
+                            value={minTickets}
+                            onChange={(e) => setMinTickets(sanitizeIntInput(e.target.value))}
+                            inputMode="numeric"
+                            placeholder="1"
+                          />
+                        </div>
 
-                {advancedOpen && (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={grid2}>
+                        <div>
+                          <div style={label}>Max tickets</div>
+                          <input
+                            style={input}
+                            value={maxTickets}
+                            onChange={(e) => setMaxTickets(sanitizeIntInput(e.target.value))}
+                            inputMode="numeric"
+                            placeholder="Unlimited"
+                          />
+                          <div style={fieldHint}>{maxTickets.trim() === "" ? "Unlimited" : `Cap: ${maxTickets}`}</div>
+                        </div>
+                      </div>
+
                       <div>
-                        <div style={label}>Min tickets</div>
+                        <div style={label}>Min purchase (tickets)</div>
                         <input
                           style={input}
-                          value={minTickets}
-                          onChange={(e) => setMinTickets(sanitizeIntInput(e.target.value))}
+                          value={minPurchaseAmount}
+                          onChange={(e) => setMinPurchaseAmount(sanitizeIntInput(e.target.value))}
                           inputMode="numeric"
                           placeholder="1"
                         />
                       </div>
-                      <div>
-                        <div style={label}>Max tickets</div>
-                        <input
-                          style={input}
-                          value={maxTickets}
-                          onChange={(e) => setMaxTickets(sanitizeIntInput(e.target.value))}
-                          inputMode="numeric"
-                          placeholder="Unlimited"
-                        />
-                        <div style={panelHint}>{maxTickets.trim() === "" ? "Unlimited" : `Cap: ${maxTickets}`}</div>
+
+                      {/* Optional: only in advanced, explain the allowance concept in plain words */}
+                      <div style={fieldHint}>
+                        “Prize deposit permission” is an approval. It can be higher than your wallet balance because it’s
+                        a permission — not a payment.
                       </div>
                     </div>
-
-                    <div>
-                      <div style={label}>Min purchase (tickets)</div>
-                      <input
-                        style={input}
-                        value={minPurchaseAmount}
-                        onChange={(e) => setMinPurchaseAmount(sanitizeIntInput(e.target.value))}
-                        inputMode="numeric"
-                        placeholder="1"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Simple status (no confusing approval amounts) */}
-                <div style={statusRow}>
-                  <span style={statusChip}>
-                    Prize deposit permission:{" "}
-                    {me ? (allowLoading ? "Checking…" : hasEnoughAllowance ? "✅ Ready" : "❌ Needed") : "Sign in"}
-                  </span>
-                  {showDetails && me && (
-                    <span style={statusChip}>
-                      Wallet: {allowLoading ? "…" : usdcBal !== null ? `${fmtUsdc(usdcBal)} USDC` : "—"}
-                    </span>
                   )}
-                  {showDetails && me && (
-                    <span style={statusChip}>
-                      Required: {fmtUsdc(requiredAllowanceU)} USDC
+
+                  {/* Status chips */}
+                  <div style={chipsRow}>
+                    <span style={chip}>
+                      Prize deposit:{" "}
+                      {me ? (allowLoading ? "Checking…" : hasEnoughAllowance ? "✅ Ready" : "❌ Needs setup") : "Sign in"}
                     </span>
+
+                    <span style={chip}>
+                      Wallet:{" "}
+                      {me ? (allowLoading ? "…" : usdcBal !== null ? `${fmtUsdc(usdcBal)} USDC` : "—") : "—"}
+                    </span>
+
+                    <span style={chip}>Required: {fmtUsdc(requiredAllowanceU)} USDC</span>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <button
+                      style={needsAllow ? btnSoft : btnDisabled}
+                      disabled={!needsAllow}
+                      onClick={onEnablePrizeDeposit}
+                      type="button"
+                    >
+                      {isPending ? "Confirming…" : me ? "Step 1 — Enable prize deposit" : "Sign in to continue"}
+                    </button>
+
+                    <button
+                      style={canSubmit ? btnPrimary : btnDisabled}
+                      disabled={!canSubmit}
+                      onClick={onLaunchRaffle}
+                      type="button"
+                    >
+                      {isPending ? "Creating…" : me ? "Step 2 — Launch raffle" : "Sign in to launch"}
+                    </button>
+                  </div>
+
+                  {!hasEnoughBalance && requiredAllowanceU > 0n && (
+                    <div style={{ fontSize: 13, color: "rgba(15, 23, 42, 0.85)", fontWeight: 900 }}>
+                      Not enough USDC for the winning pot deposit.
+                    </div>
+                  )}
+
+                  {msg && <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 1000 }}>{msg}</div>}
+
+                  {shareUrl && (
+                    <div
+                      style={{
+                        padding: 12,
+                        borderRadius: 14,
+                        border: "1px solid rgba(15, 23, 42, 0.10)",
+                        background: "rgba(2, 6, 23, 0.02)",
+                      }}
+                    >
+                      <div style={{ fontWeight: 1000 }}>Share your raffle</div>
+                      <div style={{ marginTop: 6, fontSize: 13, color: "rgba(15, 23, 42, 0.70)" }}>
+                        Copy this link and send it to a friend:
+                      </div>
+
+                      <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
+                        <input style={input} value={shareUrl} readOnly />
+                        <button style={btnPrimary} onClick={onCopyShareLink} type="button">
+                          {copied ? "Copied!" : "Copy link"}
+                        </button>
+                      </div>
+
+                      <div style={{ marginTop: 8, fontSize: 12, color: "rgba(15, 23, 42, 0.65)" }}>
+                        Raffle address: <b>{short(createdRaffleId)}</b>
+                      </div>
+                    </div>
                   )}
                 </div>
-
-                <div style={steps}>
-                  <button
-                    style={needsAllow ? btnSoft : btnDisabled}
-                    disabled={!needsAllow}
-                    onClick={onEnablePrizeDeposit}
-                    type="button"
-                    title="This grants permission for the app to deposit the prize when creating."
-                  >
-                    {isPending ? "Confirming…" : me ? "Step 1 — Enable prize deposit" : "Sign in to continue"}
-                  </button>
-
-                  <button
-                    style={canSubmit ? btnPrimary : btnDisabled}
-                    disabled={!canSubmit}
-                    onClick={onLaunchRaffle}
-                    type="button"
-                  >
-                    {isPending ? "Creating…" : me ? "Step 2 — Launch raffle" : "Sign in to launch"}
-                  </button>
-                </div>
-
-                {!hasEnoughBalance && requiredAllowanceU > 0n && (
-                  <div style={{ marginTop: 10, fontSize: 13, color: "rgba(15, 23, 42, 0.85)", fontWeight: 900 }}>
-                    Not enough USDC for the winning pot deposit.
-                  </div>
-                )}
-
-                {msg && (
-                  <div style={{ marginTop: 10, fontSize: 13, color: "#0F172A", fontWeight: 1000 }}>
-                    {msg}
-                  </div>
-                )}
-
-                {shareUrl && (
-                  <div style={{ marginTop: 12, padding: 12, borderRadius: 14, border: "1px solid rgba(15, 23, 42, 0.10)", background: "#FFFFFF" }}>
-                    <div style={{ fontWeight: 1000 }}>Share your raffle</div>
-                    <div style={{ marginTop: 6, fontSize: 13, color: "rgba(15, 23, 42, 0.70)" }}>
-                      Copy this link and send it to a friend:
-                    </div>
-                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
-                      <input style={input} value={shareUrl} readOnly />
-                      <button style={btnPrimary} onClick={onCopyShareLink} type="button">
-                        {copied ? "Copied!" : "Copy link"}
-                      </button>
-                    </div>
-                    <div style={{ marginTop: 10, fontSize: 12, color: "rgba(15, 23, 42, 0.65)" }}>
-                      Raffle address: <b>{short(createdRaffleId)}</b>
-                    </div>
-                  </div>
-                )}
-
-                {/* Only show this explanation when user asks for details */}
-                {showDetails && (
-                  <div style={panelHint}>
-                    “Permission” is not a payment. It can be higher than your wallet balance because it’s only an allowance.
-                  </div>
-                )}
               </div>
             </div>
 
-            {/* RIGHT */}
-            <div style={{ minWidth: 0, ...previewWrap }}>
-              <div style={panel}>
-                <div style={panelTitleRow}>
-                  <h3 style={panelTitle}>Preview</h3>
-                  <span style={statusChip}>Updates as you type</span>
+            {/* RIGHT COLUMN (Preview) */}
+            <div style={{ minWidth: 0, ...stickyPreview }}>
+              <div style={section}>
+                <div style={sectionHead}>
+                  <h3 style={sectionTitle}>Preview</h3>
+                  <span style={chip}>Updates as you type</span>
                 </div>
-                <div style={{ marginTop: 10 }}>
+                <div style={sectionBody}>
                   <RaffleCard raffle={previewRaffle as any} onOpen={() => {}} />
+                  <div style={fieldHint}>
+                    Preview only. Final values come from your transaction + the network.
+                  </div>
                 </div>
-                <div style={panelHint}>This is a visual preview only. Final values come from your transaction + the network.</div>
               </div>
             </div>
           </div>
