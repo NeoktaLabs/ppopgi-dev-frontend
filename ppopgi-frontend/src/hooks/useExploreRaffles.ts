@@ -1,21 +1,10 @@
 // src/hooks/useExploreRaffles.ts
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { fetchRafflesFromSubgraph } from "../indexer/subgraph";
 import { fetchRafflesOnChainFallback } from "../onchain/fallbackRaffles";
-import { ADDRESSES } from "../config/contracts";
 
 type Mode = "indexer" | "live";
-
-function norm(a: string) {
-  return a.trim().toLowerCase();
-}
-function isV2(r: RaffleListItem) {
-  return norm(r.deployer ?? "") === norm(V2_DEPLOYER);
-}
-
-// ✅ V2 deployer (exclude everything else = V1)
-const V2_DEPLOYER = norm (ADDRESSES.SingleWinnerDeployer);
 
 export function useExploreRaffles(limit = 500) {
   const [items, setItems] = useState<RaffleListItem[] | null>(null);
@@ -30,7 +19,10 @@ export function useExploreRaffles(limit = 500) {
     const controller = new AbortController();
 
     (async () => {
+      // Clean refetch UX
       setNote(null);
+      // Optional: uncomment if you want Explore to visually "reload" on refetch
+      // setItems(null);
 
       // 1) indexer-first (with timeout)
       let t: number | null = null;
@@ -47,11 +39,8 @@ export function useExploreRaffles(limit = 500) {
         setMode("indexer");
         setNote(null);
 
-        // ✅ Filter out V1 first
-        const v2 = data.filter(isV2);
-
         // Explore: newest first (best effort)
-        const sorted = [...v2].sort((a, b) => {
+        const sorted = [...data].sort((a, b) => {
           const A = Number(a.lastUpdatedTimestamp || "0");
           const B = Number(b.lastUpdatedTimestamp || "0");
           return B - A;
@@ -74,12 +63,10 @@ export function useExploreRaffles(limit = 500) {
         const data = await fetchRafflesOnChainFallback(Math.min(limit, 200));
         if (!alive) return;
 
-        // ✅ Filter out V1 here too
-        const v2 = data.filter(isV2);
-
         // Keep Explore consistent: "newest-ish first"
-        // Fallback loads newest registry entries first; still safe to slice:
-        setItems(v2.slice(0, limit));
+        // Fallback doesn't have lastUpdatedTimestamp reliably, so we keep the order returned
+        // (fallback loads newest registry entries first). Still safe to slice:
+        setItems(data.slice(0, limit));
       } catch {
         if (!alive) return;
         setNote("Could not load raffles right now. Please refresh.");
@@ -93,8 +80,5 @@ export function useExploreRaffles(limit = 500) {
     };
   }, [refreshKey, limit]);
 
-  // ✅ Extra safety: never return V1 even if state gets polluted
-  const safeItems = useMemo(() => (items ?? null ? (items ?? []).filter(isV2) : null), [items]);
-
-  return { items: safeItems, mode, note, refetch };
+  return { items, mode, note, refetch };
 }
