@@ -24,6 +24,30 @@ function statusFromUint8(n: number): RaffleStatus {
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 
+type RaffleHistory = {
+  // creation metadata
+  createdAtTimestamp?: string | null; // BigInt (seconds)
+  creationTx?: string | null; // Bytes (tx hash)
+
+  // lifecycle timestamps
+  finalizedAt?: string | null; // BigInt (seconds)
+  completedAt?: string | null; // BigInt (seconds)
+
+  // cancellation
+  canceledAt?: string | null; // BigInt (seconds)
+  canceledReason?: string | null;
+  soldAtCancel?: string | null; // BigInt
+
+  // indexing
+  lastUpdatedTimestamp?: string | null; // BigInt (seconds)
+
+  // discovery (optional)
+  registry?: string | null;
+  registryIndex?: string | null; // BigInt
+  isRegistered?: boolean | null;
+  registeredAt?: string | null; // BigInt (seconds-ish)
+};
+
 export type RaffleDetails = {
   address: string;
 
@@ -63,6 +87,9 @@ export type RaffleDetails = {
   entropyProvider: string;
   entropyRequestId: string;
   selectedProvider: string;
+
+  // ✅ subgraph-only metadata (safe optional)
+  history?: RaffleHistory;
 };
 
 async function readFirst(
@@ -98,6 +125,74 @@ async function readFirstOr(
   }
 }
 
+function mustEnv(name: string): string {
+  const v = (import.meta as any).env?.[name];
+  if (!v) throw new Error(`MISSING_ENV_${name}`);
+  return v;
+}
+
+async function fetchRaffleHistoryFromSubgraph(id: string, signal?: AbortSignal): Promise<RaffleHistory | null> {
+  // subgraph expects lowercase IDs typically
+  const raffleId = id.toLowerCase();
+  const url = mustEnv("VITE_SUBGRAPH_URL");
+
+  const query = `
+    query RaffleById($id: ID!) {
+      raffle(id: $id) {
+        createdAtTimestamp
+        creationTx
+
+        finalizedAt
+        completedAt
+
+        canceledAt
+        canceledReason
+        soldAtCancel
+
+        lastUpdatedTimestamp
+
+        registry
+        registryIndex
+        isRegistered
+        registeredAt
+      }
+    }
+  `;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ query, variables: { id: raffleId } }),
+    signal,
+  });
+
+  if (!res.ok) throw new Error("SUBGRAPH_HTTP_ERROR");
+  const json = await res.json();
+  if (json?.errors?.length) throw new Error("SUBGRAPH_GQL_ERROR");
+
+  const r = json.data?.raffle;
+  if (!r) return null;
+
+  return {
+    createdAtTimestamp: r.createdAtTimestamp ?? null,
+    creationTx: r.creationTx ?? null,
+
+    finalizedAt: r.finalizedAt ?? null,
+    completedAt: r.completedAt ?? null,
+
+    canceledAt: r.canceledAt ?? null,
+    canceledReason: r.canceledReason ?? null,
+    soldAtCancel: r.soldAtCancel ?? null,
+
+    lastUpdatedTimestamp: r.lastUpdatedTimestamp ?? null,
+
+    registry: r.registry ?? null,
+    registryIndex: r.registryIndex ?? null,
+    isRegistered: typeof r.isRegistered === "boolean" ? r.isRegistered : null,
+    registeredAt: r.registeredAt ?? null,
+  };
+}
+
 export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
   const [data, setData] = useState<RaffleDetails | null>(null);
   const [loading, setLoading] = useState(false);
@@ -125,32 +220,23 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
     if (!open || !contract || !normalizedAddress) return;
 
     let alive = true;
+    const ac = new AbortController();
 
     (async () => {
       setLoading(true);
       setNote(null);
 
+      // Kick off subgraph fetch early (do NOT fail the whole hook if it fails)
+      const historyP: Promise<RaffleHistory | null> = fetchRaffleHistoryFromSubgraph(normalizedAddress, ac.signal).catch(
+        () => null
+      );
+
       try {
-        const name = await readFirstOr(
-          contract,
-          "name",
-          ["function name() view returns (string)"],
-          "Unknown raffle"
-        );
+        const name = await readFirstOr(contract, "name", ["function name() view returns (string)"], "Unknown raffle");
 
-        const statusU8 = await readFirstOr(
-          contract,
-          "status",
-          ["function status() view returns (uint8)"],
-          255
-        );
+        const statusU8 = await readFirstOr(contract, "status", ["function status() view returns (uint8)"], 255);
 
-        const sold = await readFirstOr(
-          contract,
-          "sold",
-          ["function getSold() view returns (uint256)"],
-          0n
-        );
+        const sold = await readFirstOr(contract, "sold", ["function getSold() view returns (uint256)"], 0n);
 
         const ticketPrice = await readFirstOr(
           contract,
@@ -180,40 +266,15 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           0
         );
 
-        const deadline = await readFirstOr(
-          contract,
-          "deadline",
-          ["function deadline() view returns (uint64)"],
-          0
-        );
+        const deadline = await readFirstOr(contract, "deadline", ["function deadline() view returns (uint64)"], 0);
 
-        const paused = await readFirstOr(
-          contract,
-          "paused",
-          ["function paused() view returns (bool)"],
-          false
-        );
+        const paused = await readFirstOr(contract, "paused", ["function paused() view returns (bool)"], false);
 
-        const usdcToken = await readFirstOr(
-          contract,
-          "usdcToken",
-          ["function usdcToken() view returns (address)"],
-          ZERO
-        );
+        const usdcToken = await readFirstOr(contract, "usdcToken", ["function usdcToken() view returns (address)"], ZERO);
 
-        const creator = await readFirstOr(
-          contract,
-          "creator",
-          ["function creator() view returns (address)"],
-          ZERO
-        );
+        const creator = await readFirstOr(contract, "creator", ["function creator() view returns (address)"], ZERO);
 
-        const winner = await readFirstOr(
-          contract,
-          "winner",
-          ["function winner() view returns (address)"],
-          ZERO
-        );
+        const winner = await readFirstOr(contract, "winner", ["function winner() view returns (address)"], ZERO);
 
         const winningTicketIndex = await readFirstOr(
           contract,
@@ -255,7 +316,6 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           contract,
           "finalizeRequestId",
           [
-            // try common spellings; keep resilient
             "function finalizeRequestId() view returns (uint64)",
             "function entropyRequestId() view returns (uint64)", // fallback if contract reuses the same id
           ],
@@ -269,12 +329,7 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           0
         );
 
-        const entropy = await readFirstOr(
-          contract,
-          "entropy",
-          ["function entropy() view returns (address)"],
-          ZERO
-        );
+        const entropy = await readFirstOr(contract, "entropy", ["function entropy() view returns (address)"], ZERO);
 
         const entropyProvider = await readFirstOr(
           contract,
@@ -296,6 +351,9 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           ["function selectedProvider() view returns (address)"],
           ZERO
         );
+
+        // Wait for subgraph history (if it finishes; otherwise null)
+        const history = await historyP;
 
         if (!alive) return;
 
@@ -332,6 +390,8 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           entropyProvider: String(entropyProvider),
           entropyRequestId: String(entropyRequestId),
           selectedProvider: String(selectedProvider),
+
+          history: history ?? undefined,
         });
 
         if (String(name) === "Unknown raffle") {
@@ -349,6 +409,11 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
 
     return () => {
       alive = false;
+      try {
+        ac.abort();
+      } catch {
+        // ignore
+      }
     };
   }, [open, contract, normalizedAddress]);
 
