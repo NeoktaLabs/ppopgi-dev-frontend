@@ -8,6 +8,9 @@ type Props = {
   raffle: RaffleListItem;
   onOpen: (id: string) => void;
 
+  // ✅ NEW (optional): open SafetyProofModal for this raffle
+  onOpenSafety?: (id: string) => void;
+
   // Podium styling (top 3 only)
   ribbon?: "gold" | "silver" | "bronze";
 };
@@ -159,7 +162,7 @@ function normalizeCancelReason(reason?: string | null) {
   return reason?.trim() ? reason.trim() : "Canceled";
 }
 
-export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
+export function RaffleCard({ raffle, onOpen, onOpenSafety, ribbon }: Props) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const [isHover, setIsHover] = useState(false);
@@ -202,6 +205,12 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     }
 
     window.setTimeout(() => setCopyMsg(null), 1400);
+  }
+
+  function onSafetyClick(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onOpenSafety) onOpenSafety(raffle.id);
   }
 
   // one user-facing status
@@ -359,6 +368,22 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
     display: "grid",
     placeItems: "center",
     cursor: "pointer",
+  };
+
+  // ✅ Blue “shield” button for Safety
+  const safetyBtn: React.CSSProperties = {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    display: "grid",
+    placeItems: "center",
+    cursor: onOpenSafety ? "pointer" : "not-allowed",
+    opacity: onOpenSafety ? 1 : 0.55,
+    background:
+      "linear-gradient(180deg, rgba(235,245,255,0.92), rgba(214,235,255,0.80))," +
+      "radial-gradient(120px 60px at 30% 25%, rgba(255,255,255,0.70), rgba(255,255,255,0) 60%)",
+    border: "1px solid rgba(0,0,0,0.10)",
+    boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
   };
 
   // ✅ Move toast a bit higher so it doesn't collide with the "Ppopgi" title
@@ -562,20 +587,51 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
           {displayStatus.toUpperCase()}
         </div>
 
-        <button style={shareBtn} onClick={onShareCopy} title="Share" aria-label="Share">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M14 3h7v7" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M21 3l-9 9" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <path
-              d="M10 7H7a4 4 0 0 0-4 4v6a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4v-3"
-              stroke={inkStrong}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity="0.9"
-            />
-          </svg>
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {/* ✅ Safety shield */}
+          <button
+            style={safetyBtn}
+            onClick={onSafetyClick}
+            title={onOpenSafety ? "Safety info" : "Safety info (not available)"}
+            aria-label="Safety info"
+            disabled={!onOpenSafety}
+          >
+            {/* shield icon */}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 2l8 4v6c0 5-3.5 9.4-8 10-4.5-.6-8-5-8-10V6l8-4Z"
+                stroke="#0B2E5C"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                opacity="0.95"
+              />
+              <path
+                d="M9.2 12.2l1.9 1.9 3.9-3.9"
+                stroke="#0B2E5C"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.95"
+              />
+            </svg>
+          </button>
+
+          {/* Share */}
+          <button style={shareBtn} onClick={onShareCopy} title="Share" aria-label="Share">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M14 3h7v7" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M21 3l-9 9" stroke={inkStrong} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M10 7H7a4 4 0 0 0-4 4v6a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4v-3"
+                stroke={inkStrong}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.9"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {copyMsg && <div style={copyToast}>{copyMsg}</div>}
@@ -664,7 +720,10 @@ export function RaffleCard({ raffle, onOpen, ribbon }: Props) {
           {displayStatus === "Open" || displayStatus === "Getting ready" ? (
             `Ends in ${bottomLine}`
           ) : (
-            <span className={pulseBottom ? "pp-rc-pulse" : undefined} style={pulseBottom ? { color: "#0B2E5C" } : undefined}>
+            <span
+              className={pulseBottom ? "pp-rc-pulse" : undefined}
+              style={pulseBottom ? { color: "#0B2E5C" } : undefined}
+            >
               {bottomLine}
             </span>
           )}
