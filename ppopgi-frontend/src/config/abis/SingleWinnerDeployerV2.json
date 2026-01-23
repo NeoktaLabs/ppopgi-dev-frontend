@@ -32,6 +32,11 @@
 				"type": "address"
 			},
 			{
+				"internalType": "uint32",
+				"name": "_callbackGasLimit",
+				"type": "uint32"
+			},
+			{
 				"internalType": "address",
 				"name": "_feeRecipient",
 				"type": "address"
@@ -52,7 +57,7 @@
 	},
 	{
 		"inputs": [],
-		"name": "InvalidRescueTarget",
+		"name": "InvalidCallbackGasLimit",
 		"type": "error"
 	},
 	{
@@ -68,6 +73,17 @@
 	{
 		"inputs": [],
 		"name": "ReentrancyGuardReentrantCall",
+		"type": "error"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "bytes",
+				"name": "lowLevelData",
+				"type": "bytes"
+			}
+		],
+		"name": "RegistryRegistrationFailed",
 		"type": "error"
 	},
 	{
@@ -106,6 +122,12 @@
 				"internalType": "address",
 				"name": "provider",
 				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint32",
+				"name": "callbackGasLimit",
+				"type": "uint32"
 			},
 			{
 				"indexed": false,
@@ -195,6 +217,12 @@
 			},
 			{
 				"indexed": false,
+				"internalType": "uint32",
+				"name": "callbackGasLimit",
+				"type": "uint32"
+			},
+			{
+				"indexed": false,
 				"internalType": "address",
 				"name": "feeRecipient",
 				"type": "address"
@@ -228,23 +256,17 @@
 		"type": "event"
 	},
 	{
-		"anonymous": false,
-		"inputs": [
+		"inputs": [],
+		"name": "DEFAULT_CALLBACK_GAS_LIMIT",
+		"outputs": [
 			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "lottery",
-				"type": "address"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "creator",
-				"type": "address"
+				"internalType": "uint32",
+				"name": "",
+				"type": "uint32"
 			}
 		],
-		"name": "RegistrationFailed",
-		"type": "event"
+		"stateMutability": "view",
+		"type": "function"
 	},
 	{
 		"inputs": [],
@@ -254,6 +276,19 @@
 				"internalType": "uint256",
 				"name": "",
 				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "callbackGasLimit",
+		"outputs": [
+			{
+				"internalType": "uint32",
+				"name": "",
+				"type": "uint32"
 			}
 		],
 		"stateMutability": "view",
@@ -387,24 +422,6 @@
 		"type": "function"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "lotteryAddr",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "creator",
-				"type": "address"
-			}
-		],
-		"name": "rescueRegistration",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
 		"inputs": [],
 		"name": "safeOwner",
 		"outputs": [
@@ -433,6 +450,11 @@
 				"internalType": "address",
 				"name": "_provider",
 				"type": "address"
+			},
+			{
+				"internalType": "uint32",
+				"name": "_callbackGasLimit",
+				"type": "uint32"
 			},
 			{
 				"internalType": "address",

@@ -19,6 +19,11 @@
 						"type": "address"
 					},
 					{
+						"internalType": "uint32",
+						"name": "callbackGasLimit",
+						"type": "uint32"
+					},
+					{
 						"internalType": "address",
 						"name": "feeRecipient",
 						"type": "address"
@@ -69,7 +74,7 @@
 						"type": "uint32"
 					}
 				],
-				"internalType": "struct LotterySingleWinner.LotteryParams",
+				"internalType": "struct LotterySingleWinnerV2.LotteryParams",
 				"name": "params",
 				"type": "tuple"
 			}
@@ -155,6 +160,11 @@
 	{
 		"inputs": [],
 		"name": "InsufficientFee",
+		"type": "error"
+	},
+	{
+		"inputs": [],
+		"name": "InvalidCallbackGasLimit",
 		"type": "error"
 	},
 	{
@@ -354,6 +364,19 @@
 		"inputs": [],
 		"name": "ZeroAddress",
 		"type": "error"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint32",
+				"name": "newGasLimit",
+				"type": "uint32"
+			}
+		],
+		"name": "CallbackGasLimitUpdated",
+		"type": "event"
 	},
 	{
 		"anonymous": false,
@@ -761,6 +784,19 @@
 	},
 	{
 		"inputs": [],
+		"name": "DEFAULT_CALLBACK_GAS_LIMIT",
+		"outputs": [
+			{
+				"internalType": "uint32",
+				"name": "",
+				"type": "uint32"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
 		"name": "HARD_CAP_TICKETS",
 		"outputs": [
 			{
@@ -900,6 +936,19 @@
 		"name": "buyTickets",
 		"outputs": [],
 		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "callbackGasLimit",
+		"outputs": [
+			{
+				"internalType": "uint32",
+				"name": "",
+				"type": "uint32"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
@@ -1057,7 +1106,7 @@
 		"name": "entropy",
 		"outputs": [
 			{
-				"internalType": "contract IEntropy",
+				"internalType": "contract IEntropyV2",
 				"name": "",
 				"type": "address"
 			}
@@ -1275,6 +1324,19 @@
 	{
 		"inputs": [
 			{
+				"internalType": "uint32",
+				"name": "gasLimit",
+				"type": "uint32"
+			}
+		],
+		"name": "setCallbackGasLimit",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
 				"internalType": "address",
 				"name": "e",
 				"type": "address"
@@ -1329,7 +1391,7 @@
 		"name": "status",
 		"outputs": [
 			{
-				"internalType": "enum LotterySingleWinner.Status",
+				"internalType": "enum LotterySingleWinnerV2.Status",
 				"name": "",
 				"type": "uint8"
 			}
