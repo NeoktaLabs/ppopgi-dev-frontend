@@ -13,6 +13,13 @@ function norm(a: string) {
   return a.trim().toLowerCase();
 }
 
+// ✅ V2 deployer (exclude everything else = V1)
+const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
+
+function isV2(r: RaffleListItem) {
+  return norm(r.deployer ?? "") === norm(V2_DEPLOYER);
+}
+
 // Minimal GraphQL helper (kept local so we don’t disturb your existing indexer module)
 async function subgraphRequest<T>(query: string, variables: any, signal?: AbortSignal): Promise<T> {
   const url = (import.meta as any).env?.VITE_SUBGRAPH_URL;
@@ -58,12 +65,14 @@ export function useDashboardData(account: string | null, limit = 200) {
 
       try {
         // 1) Load all raffles (indexer util you already have)
-        const all = await fetchRafflesFromSubgraph( { signal: controller.signal } );
+        const all = await fetchRafflesFromSubgraph({ signal: controller.signal });
         if (!alive) return;
 
-        const createdMine = all.filter((r: any) => {
+        // ✅ Filter out V1 here (keep only V2)
+        const allV2 = all.filter(isV2);
+
+        const createdMine = allV2.filter((r: any) => {
           const creator = r.creator ? norm(String(r.creator)) : null;
-          // if creator is missing in list item types sometimes, fallback to deployer best-effort
           const deployer = r.deployer ? norm(String(r.deployer)) : null;
           return creator === me || deployer === me;
         });
@@ -98,8 +107,8 @@ export function useDashboardData(account: string | null, limit = 200) {
           new Set((data?.raffleEvents ?? []).map((e) => String(e?.raffle?.id)).filter(Boolean))
         );
 
-        // map IDs back to list items (from "all" we already loaded)
-        const byId = new Map(all.map((r) => [norm(r.id), r]));
+        // ✅ Map IDs back to V2-only list
+        const byId = new Map(allV2.map((r) => [norm(r.id), r]));
         const joinedMine: RaffleListItem[] = ids
           .map((id) => byId.get(norm(id)))
           .filter(Boolean) as RaffleListItem[];
