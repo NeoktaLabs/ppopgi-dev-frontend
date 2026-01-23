@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { fetchRafflesFromSubgraph } from "../indexer/subgraph";
-import { ADDRESSES } from "../config/contracts";
 
 type Result = {
   created: RaffleListItem[] | null;
@@ -12,14 +11,6 @@ type Result = {
 
 function norm(a: string) {
   return a.trim().toLowerCase();
-}
-
-// ✅ V2 deployer (exclude everything else = V1)
-const V2_DEPLOYER = norm (ADDRESSES.SingleWinnerDeployer);
-const V2_DEPLOYER_N = norm(V2_DEPLOYER);
-
-function isV2(r: RaffleListItem) {
-  return norm(String(r.deployer || "")) === V2_DEPLOYER_N;
 }
 
 // Minimal GraphQL helper (kept local so we don’t disturb your existing indexer module)
@@ -66,26 +57,20 @@ export function useDashboardData(account: string | null, limit = 200) {
       setNote(null);
 
       try {
-        // 1) Load all raffles (indexer util you already have)
+        // 1) Load raffles list (whatever the indexer currently has)
         const all = await fetchRafflesFromSubgraph({ signal: controller.signal });
         if (!alive) return;
 
-        // ✅ Keep only V2 raffles
-        const allV2 = all.filter(isV2);
-
-        // Created by me
         // Created by me (creator === me)
-const createdMine = allV2.filter((r) => {
-  const creator = r.creator ? norm(String(r.creator)) : null;
-  return creator === me;
-});
+        const createdMine = all.filter((r) => {
+          const creator = r.creator ? norm(String(r.creator)) : null;
+          return creator === me;
+        });
 
-        createdMine.sort(
-          (a, b) => Number(b.lastUpdatedTimestamp || "0") - Number(a.lastUpdatedTimestamp || "0")
-        );
+        createdMine.sort((a, b) => Number(b.lastUpdatedTimestamp || "0") - Number(a.lastUpdatedTimestamp || "0"));
         setCreated(createdMine.slice(0, limit));
 
-        // 2) Find joined raffle IDs from RaffleEvent(TICKETS_PURCHASED, actor=me)
+        // 2) Joined raffle IDs from RaffleEvent(TICKETS_PURCHASED, actor=me)
         const data = await subgraphRequest<{
           raffleEvents: Array<{ raffle: { id: string } }>;
         }>(
@@ -107,19 +92,13 @@ const createdMine = allV2.filter((r) => {
 
         if (!alive) return;
 
-        const ids = Array.from(
-          new Set((data?.raffleEvents ?? []).map((e) => String(e?.raffle?.id)).filter(Boolean))
-        );
+        const ids = Array.from(new Set((data?.raffleEvents ?? []).map((e) => String(e?.raffle?.id)).filter(Boolean)));
 
-        // ✅ Map joined IDs back to V2-only list (drops V1 automatically)
-        const byId = new Map(allV2.map((r) => [norm(r.id), r]));
-        const joinedMine: RaffleListItem[] = ids
-          .map((id) => byId.get(norm(id)))
-          .filter(Boolean) as RaffleListItem[];
+        // Map IDs back to the raffles we loaded
+        const byId = new Map(all.map((r) => [norm(String(r.id)), r]));
+        const joinedMine: RaffleListItem[] = ids.map((id) => byId.get(norm(id))).filter(Boolean) as RaffleListItem[];
 
-        joinedMine.sort(
-          (a, b) => Number(b.lastUpdatedTimestamp || "0") - Number(a.lastUpdatedTimestamp || "0")
-        );
+        joinedMine.sort((a, b) => Number(b.lastUpdatedTimestamp || "0") - Number(a.lastUpdatedTimestamp || "0"));
         setJoined(joinedMine.slice(0, limit));
 
         setNote(null);
