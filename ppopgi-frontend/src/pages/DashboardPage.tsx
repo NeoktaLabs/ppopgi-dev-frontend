@@ -1,10 +1,10 @@
 // src/pages/DashboardPage.tsx
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { formatUnits } from "ethers";
 import { RaffleCard } from "../components/RaffleCard";
 
 import { useClaimableRaffles } from "../hooks/useClaimableRaffles";
-import { useDashboardData } from "../hooks/useDashboardData"; // ✅ use true dashboard hook
+import { useDashboardData } from "../hooks/useDashboardData";
 
 import { getContract, prepareContractCall } from "thirdweb";
 import { useSendAndConfirmTransaction } from "thirdweb/react";
@@ -32,71 +32,24 @@ function fmtNative(raw: string) {
   }
 }
 
-function norm(a: string) {
-  return (a || "").trim().toLowerCase();
-}
-
-// ✅ V2 deployer (exclude everything else = V1)
-const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
-function isV2Raffle(r: any) {
-  return norm(r?.deployer ?? "") === norm(V2_DEPLOYER);
-}
-
-// ✅ Minimal ABI so thirdweb can type prepareContractCall
 const RAFFLE_MIN_ABI = [
-  {
-    type: "function",
-    name: "withdrawFunds",
-    stateMutability: "nonpayable",
-    inputs: [],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "withdrawNative",
-    stateMutability: "nonpayable",
-    inputs: [],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "claimTicketRefund",
-    stateMutability: "nonpayable",
-    inputs: [],
-    outputs: [],
-  },
+  { type: "function", name: "withdrawFunds", stateMutability: "nonpayable", inputs: [], outputs: [] },
+  { type: "function", name: "withdrawNative", stateMutability: "nonpayable", inputs: [], outputs: [] },
+  { type: "function", name: "claimTicketRefund", stateMutability: "nonpayable", inputs: [], outputs: [] },
 ] as const;
 
 type MethodName = "withdrawFunds" | "withdrawNative" | "claimTicketRefund";
 
 export function DashboardPage({ account, onOpenRaffle }: Props) {
-  // ✅ True dashboard data
   const dash = useDashboardData(account, 250);
-
-  // ✅ Claimables data (for action buttons only)
   const claim = useClaimableRaffles(account, 250);
 
   const { mutateAsync: sendAndConfirm, isPending } = useSendAndConfirmTransaction();
   const [msg, setMsg] = useState<string | null>(null);
 
-  // ✅ V2-only dashboard lists
-  const created = useMemo(() => {
-    const list = dash.created ?? null;
-    if (!list) return null;
-    return list.filter(isV2Raffle);
-  }, [dash.created]);
-
-  const joined = useMemo(() => {
-    const list = dash.joined ?? null;
-    if (!list) return null;
-    return list.filter(isV2Raffle);
-  }, [dash.joined]);
-
-  // ✅ V2-only claimables list
-  const claimables = useMemo(() => {
-    if (!claim.items) return null;
-    return claim.items.filter((it: any) => isV2Raffle(it?.raffle));
-  }, [claim.items]);
+  const created = dash.created ?? null;
+  const joined = dash.joined ?? null;
+  const claimables = claim.items ?? null;
 
   const section: React.CSSProperties = {
     marginTop: 18,
@@ -130,11 +83,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
     width: "100%",
   };
 
-  const actionBtnDisabled: React.CSSProperties = {
-    ...actionBtn,
-    opacity: 0.55,
-    cursor: "not-allowed",
-  };
+  const actionBtnDisabled: React.CSSProperties = { ...actionBtn, opacity: 0.55, cursor: "not-allowed" };
 
   async function callRaffleTx(raffleId: string, method: MethodName) {
     setMsg(null);
@@ -152,13 +101,9 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
         abi: RAFFLE_MIN_ABI,
       });
 
-      const tx = prepareContractCall({
-        contract: raffleContract,
-        method,
-        params: [] as const,
-      });
-
+      const tx = prepareContractCall({ contract: raffleContract, method, params: [] as const });
       await sendAndConfirm(tx);
+
       setMsg("Done.");
       claim.refetch();
     } catch (e: any) {
@@ -200,8 +145,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
           <div style={{ fontSize: 13, opacity: 0.9 }}>{statusLine}</div>
 
           <div style={{ fontSize: 13, opacity: 0.9 }}>
-            Claimable USDC: <b>{fmtUsdc(it.claimableUsdc)} USDC</b> • Claimable native:{" "}
-            <b>{fmtNative(it.claimableNative)}</b>
+            Claimable USDC: <b>{fmtUsdc(it.claimableUsdc)} USDC</b> • Claimable native: <b>{fmtNative(it.claimableNative)}</b>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -209,7 +153,6 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
               style={hasUsdc && !isPending ? actionBtn : actionBtnDisabled}
               disabled={!hasUsdc || isPending}
               onClick={() => callRaffleTx(raffle.id, "withdrawFunds")}
-              title="Withdraw your claimable USDC (if available)"
             >
               {isPending ? "Confirming…" : "Withdraw USDC"}
             </button>
@@ -218,7 +161,6 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
               style={hasNative && !isPending ? actionBtn : actionBtnDisabled}
               disabled={!hasNative || isPending}
               onClick={() => callRaffleTx(raffle.id, "withdrawNative")}
-              title="Withdraw your claimable native (if available)"
             >
               {isPending ? "Confirming…" : "Withdraw native"}
             </button>
@@ -229,16 +171,9 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
               style={!isPending ? actionBtn : actionBtnDisabled}
               disabled={isPending}
               onClick={() => callRaffleTx(raffle.id, "claimTicketRefund")}
-              title="Claim a ticket refund if the contract says you have one"
             >
               {isPending ? "Confirming…" : "Claim ticket refund"}
             </button>
-          )}
-
-          {(it.isCreator || it.roles.participated) && (
-            <div style={{ fontSize: 12, opacity: 0.8 }}>
-              If you’re not eligible yet, the transaction will revert — the contract enforces all rules.
-            </div>
           )}
         </div>
       </div>
@@ -266,14 +201,9 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
         </div>
       </div>
 
-      {(dash.note || claim.note) && (
-        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-          {dash.note || claim.note}
-        </div>
-      )}
+      {(dash.note || claim.note) && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>{dash.note || claim.note}</div>}
       {msg && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{msg}</div>}
 
-      {/* ✅ Created */}
       <div style={section}>
         <div style={{ fontWeight: 800 }}>Your created raffles</div>
         <div style={grid}>
@@ -287,14 +217,11 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
         </div>
       </div>
 
-      {/* ✅ Joined */}
       <div style={section}>
         <div style={{ fontWeight: 800 }}>Raffles you joined</div>
         <div style={grid}>
           {!joined && <div style={{ opacity: 0.85, fontSize: 13 }}>Loading…</div>}
-          {joined && joined.length === 0 && (
-            <div style={{ opacity: 0.85, fontSize: 13 }}>You haven’t joined any raffles yet.</div>
-          )}
+          {joined && joined.length === 0 && <div style={{ opacity: 0.85, fontSize: 13 }}>You haven’t joined any raffles yet.</div>}
           {joined?.map((raffle) => (
             <div key={raffle.id}>
               <RaffleCard raffle={raffle} onOpen={onOpenRaffle} />
@@ -303,14 +230,11 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
         </div>
       </div>
 
-      {/* ✅ Claimables (actions live here, separated on purpose) */}
       <div style={section}>
         <div style={{ fontWeight: 800 }}>Claimables</div>
         <div style={grid}>
           {!claimables && <div style={{ opacity: 0.85, fontSize: 13 }}>Loading…</div>}
-          {claimables && claimables.length === 0 && (
-            <div style={{ opacity: 0.85, fontSize: 13 }}>Nothing to claim right now.</div>
-          )}
+          {claimables && claimables.length === 0 && <div style={{ opacity: 0.85, fontSize: 13 }}>Nothing to claim right now.</div>}
           {claimables?.map(renderClaimableItem)}
         </div>
       </div>
