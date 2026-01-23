@@ -15,9 +15,10 @@ function norm(a: string) {
 
 // ✅ V2 deployer (exclude everything else = V1)
 const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
+const V2_DEPLOYER_N = norm(V2_DEPLOYER);
 
 function isV2(r: RaffleListItem) {
-  return norm(r.deployer ?? "") === norm(V2_DEPLOYER);
+  return norm(String(r.deployer || "")) === V2_DEPLOYER_N;
 }
 
 // Minimal GraphQL helper (kept local so we don’t disturb your existing indexer module)
@@ -68,17 +69,20 @@ export function useDashboardData(account: string | null, limit = 200) {
         const all = await fetchRafflesFromSubgraph({ signal: controller.signal });
         if (!alive) return;
 
-        // ✅ Filter out V1 here (keep only V2)
+        // ✅ Keep only V2 raffles
         const allV2 = all.filter(isV2);
 
+        // Created by me
         const createdMine = allV2.filter((r: any) => {
           const creator = r.creator ? norm(String(r.creator)) : null;
+          // best-effort fallback if creator is missing in some edge cases
           const deployer = r.deployer ? norm(String(r.deployer)) : null;
           return creator === me || deployer === me;
         });
 
-        // newest-ish first
-        createdMine.sort((a, b) => Number(b.lastUpdatedTimestamp || "0") - Number(a.lastUpdatedTimestamp || "0"));
+        createdMine.sort(
+          (a, b) => Number(b.lastUpdatedTimestamp || "0") - Number(a.lastUpdatedTimestamp || "0")
+        );
         setCreated(createdMine.slice(0, limit));
 
         // 2) Find joined raffle IDs from RaffleEvent(TICKETS_PURCHASED, actor=me)
@@ -107,13 +111,15 @@ export function useDashboardData(account: string | null, limit = 200) {
           new Set((data?.raffleEvents ?? []).map((e) => String(e?.raffle?.id)).filter(Boolean))
         );
 
-        // ✅ Map IDs back to V2-only list
+        // ✅ Map joined IDs back to V2-only list (drops V1 automatically)
         const byId = new Map(allV2.map((r) => [norm(r.id), r]));
         const joinedMine: RaffleListItem[] = ids
           .map((id) => byId.get(norm(id)))
           .filter(Boolean) as RaffleListItem[];
 
-        joinedMine.sort((a, b) => Number(b.lastUpdatedTimestamp || "0") - Number(a.lastUpdatedTimestamp || "0"));
+        joinedMine.sort(
+          (a, b) => Number(b.lastUpdatedTimestamp || "0") - Number(a.lastUpdatedTimestamp || "0")
+        );
         setJoined(joinedMine.slice(0, limit));
 
         setNote(null);
