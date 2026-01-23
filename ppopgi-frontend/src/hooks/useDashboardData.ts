@@ -73,12 +73,11 @@ export function useDashboardData(account: string | null, limit = 200) {
         const allV2 = all.filter(isV2);
 
         // Created by me
-        const createdMine = allV2.filter((r: any) => {
-          const creator = r.creator ? norm(String(r.creator)) : null;
-          // best-effort fallback if creator is missing in some edge cases
-          const deployer = r.deployer ? norm(String(r.deployer)) : null;
-          return creator === me || deployer === me;
-        });
+        // Created by me (creator === me)
+const createdMine = allV2.filter((r) => {
+  const creator = r.creator ? norm(String(r.creator)) : null;
+  return creator === me;
+});
 
         createdMine.sort(
           (a, b) => Number(b.lastUpdatedTimestamp || "0") - Number(a.lastUpdatedTimestamp || "0")
