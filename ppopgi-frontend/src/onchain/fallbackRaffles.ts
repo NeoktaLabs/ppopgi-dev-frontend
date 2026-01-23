@@ -73,6 +73,9 @@ export async function fetchRafflesOnChainFallback(limit = 120): Promise<RaffleLi
       raffle.creator(), // ✅ exists in your ABI
     ]);
 
+    // ✅ fallback "last updated": now (seconds)
+    const nowSec = String(Math.floor(Date.now() / 1000));
+
     out.push({
       id: addr,
       name: String(name),
@@ -85,8 +88,8 @@ export async function fetchRafflesOnChainFallback(limit = 120): Promise<RaffleLi
       protocolFeePercent: protocolFeePercent.toString(),
       feeRecipient: String(feeRecipient),
       deployer: String(deployer),
-      creator: String(creator), // ✅ FIX for TS
-      lastUpdatedTimestamp: null,
+      creator: String(creator),
+      lastUpdatedTimestamp: nowSec,
     });
   }
 
