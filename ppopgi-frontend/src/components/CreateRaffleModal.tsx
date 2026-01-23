@@ -10,9 +10,6 @@ import { useActiveAccount, useSendAndConfirmTransaction } from "thirdweb/react";
 import { thirdwebClient } from "../thirdweb/client";
 import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
 
-import { RaffleCard } from "../components/RaffleCard";
-import type { RaffleListItem } from "../indexer/subgraph";
-
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -31,6 +28,7 @@ function unitToSeconds(unit: DurationUnit): number {
   return 86400;
 }
 
+// ---- integer-only helpers ----
 function sanitizeIntInput(raw: string) {
   return raw.replace(/[^\d]/g, "");
 }
@@ -53,10 +51,18 @@ function isHexAddress(a: string) {
   return /^0x[0-9a-fA-F]{40}$/.test(a);
 }
 
-// Deployer event (to extract raffle address)
-const DEPLOYER_EVENT_ABI = [
+const EXPLORER_BASE = "https://explorer.etherlink.com";
+function explorerAddressUrl(addr: string) {
+  return `${EXPLORER_BASE}/address/${addr}`;
+}
+function explorerTxUrl(hash: string) {
+  return `${EXPLORER_BASE}/tx/${hash}`;
+}
+
+// Minimal event ABI to extract created raffle address (best-effort)
+const DEPLOYER_EVENT_IFACE = new Interface([
   "event LotteryDeployed(address indexed lottery,address indexed creator,uint256 winningPot,uint256 ticketPrice,string name,address usdc,address entropy,address entropyProvider,uint32 callbackGasLimit,address feeRecipient,uint256 protocolFeePercent,uint64 deadline,uint64 minTickets,uint64 maxTickets)",
-];
+]);
 
 export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const { data, loading, note } = useFactoryConfig(open);
@@ -68,46 +74,45 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   // ---------- form state ----------
   const [name, setName] = useState("");
-  const [ticketPrice, setTicketPrice] = useState("1"); // integers only
-  const [winningPot, setWinningPot] = useState("100"); // integers only
+  const [ticketPrice, setTicketPrice] = useState("1"); // ✅ integer-only USDC
+  const [winningPot, setWinningPot] = useState("100"); // ✅ integer-only USDC
 
+  // Duration
   const [durationValue, setDurationValue] = useState("24");
   const [durationUnit, setDurationUnit] = useState<DurationUnit>("hours");
 
+  // Advanced (collapsed by default)
   const [advancedOpen, setAdvancedOpen] = useState(false);
-
   const [minTickets, setMinTickets] = useState("1");
   const [maxTickets, setMaxTickets] = useState(""); // empty = unlimited
   const [minPurchaseAmount, setMinPurchaseAmount] = useState("1");
 
+  // UX messages + share
   const [msg, setMsg] = useState<string | null>(null);
   const [createdRaffleId, setCreatedRaffleId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [createdTxHash, setCreatedTxHash] = useState<string | null>(null);
 
-  // --- allowance/balance ---
+  // --- Allowance/balance state ---
   const [usdcBal, setUsdcBal] = useState<bigint | null>(null);
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [allowLoading, setAllowLoading] = useState(false);
 
-  const deployer = useMemo(
-    () =>
-      getContract({
-        client: thirdwebClient,
-        chain: ETHERLINK_CHAIN,
-        address: ADDRESSES.SingleWinnerDeployer,
-      }),
-    []
-  );
+  const deployer = getContract({
+    client: thirdwebClient,
+    chain: ETHERLINK_CHAIN,
+    address: ADDRESSES.SingleWinnerDeployer,
+  });
 
+  // USDC contract (from live config if present, else fallback)
+  const usdcAddr = data?.usdc || ADDRESSES.USDC;
   const usdcContract = useMemo(() => {
-    const addr = data?.usdc || ADDRESSES.USDC;
-    if (!addr) return null;
+    if (!usdcAddr) return null;
     return getContract({
       client: thirdwebClient,
       chain: ETHERLINK_CHAIN,
-      address: addr,
+      address: usdcAddr,
     });
-  }, [data?.usdc]);
+  }, [usdcAddr]);
 
   // ---- parse + validate ----
   const durV = toIntStrict(durationValue, 0);
@@ -117,9 +122,10 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const MAX_DURATION_SECONDS = 30 * 24 * 3600;
   const durOk = durationSecondsN >= MIN_DURATION_SECONDS && durationSecondsN <= MAX_DURATION_SECONDS;
 
+  // Advanced ints
   const minTn = toIntStrict(minTickets, 1);
   const maxTnRaw = toIntStrict(maxTickets, 0);
-  const maxTn = maxTickets.trim() === "" ? 0 : maxTnRaw; // 0 = unlimited
+  const maxTn = maxTickets.trim() === "" ? 0 : maxTnRaw; // 0 means unlimited
   const minPurchase = toIntStrict(minPurchaseAmount, 1);
 
   const minT = BigInt(Math.max(1, minTn));
@@ -130,33 +136,35 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const ticketsOk = maxTicketsIsUnlimited ? true : maxT >= minT;
   const minPurchaseOk = maxTicketsIsUnlimited ? true : BigInt(minPurchaseU32) <= maxT;
 
+  // ✅ integer-only amounts
   const ticketPriceU = useMemo(() => {
+    const n = toIntStrict(ticketPrice, 0);
     try {
-      const clean = sanitizeIntInput(ticketPrice || "0");
-      return parseUnits(clean || "0", 6);
+      return parseUnits(String(n), 6);
     } catch {
       return 0n;
     }
   }, [ticketPrice]);
 
   const winningPotU = useMemo(() => {
+    const n = toIntStrict(winningPot, 0);
     try {
-      const clean = sanitizeIntInput(winningPot || "0");
-      return parseUnits(clean || "0", 6);
+      return parseUnits(String(n), 6);
     } catch {
       return 0n;
     }
   }, [winningPot]);
 
+  // Required allowance for create
   const requiredAllowanceU = winningPotU;
 
   const hasEnoughAllowance = allowance !== null ? allowance >= requiredAllowanceU : false;
   const hasEnoughBalance = usdcBal !== null ? usdcBal >= requiredAllowanceU : true;
 
   const durationHint = useMemo(() => {
-    if (!durV) return "Choose a duration.";
-    if (durationSecondsN < MIN_DURATION_SECONDS) return "Minimum is 5 minutes.";
-    if (durationSecondsN > MAX_DURATION_SECONDS) return "Maximum is 30 days.";
+    if (!durV) return "Pick a duration.";
+    if (durationSecondsN < MIN_DURATION_SECONDS) return "Minimum duration is 5 minutes.";
+    if (durationSecondsN > MAX_DURATION_SECONDS) return "Maximum duration is 30 days.";
     const end = new Date(Date.now() + durationSecondsN * 1000);
     return `Ends at: ${end.toLocaleString()}`;
   }, [durV, durationSecondsN]);
@@ -166,13 +174,15 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     !isPending &&
     name.trim().length > 0 &&
     durOk &&
+    minT > 0n &&
     ticketsOk &&
     minPurchaseOk &&
     requiredAllowanceU > 0n &&
     hasEnoughAllowance &&
     hasEnoughBalance;
 
-  const needsAllow = !!me && !isPending && !!usdcContract && requiredAllowanceU > 0n && !hasEnoughAllowance;
+  const needsPermission =
+    !!me && !isPending && !!usdcContract && requiredAllowanceU > 0n && !hasEnoughAllowance;
 
   async function refreshAllowance() {
     if (!open) return;
@@ -206,26 +216,20 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    setMsg(null);
-    setCreatedRaffleId(null);
-    setCopied(false);
-    setAdvancedOpen(false);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
     if (!me) return;
     refreshAllowance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, me, usdcContract?.address]);
 
-  async function onEnablePrizeDeposit() {
+  async function onGrantPermission() {
     setMsg(null);
+
     if (!me) return setMsg("Please sign in first.");
     if (!usdcContract) return setMsg("USDC contract not available right now.");
-    if (requiredAllowanceU <= 0n) return setMsg("Enter a winning pot first.");
+    if (requiredAllowanceU <= 0n) return setMsg("Enter a prize amount first.");
 
     try {
+      // ✅ Approve exactly the prize pot (keeps it simple & predictable)
       const tx = prepareContractCall({
         contract: usdcContract,
         method: "function approve(address spender,uint256 amount) returns (bool)",
@@ -234,53 +238,26 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
       await sendAndConfirm(tx);
       await refreshAllowance();
-      setMsg("✅ Prize deposit is ready. You can launch your raffle.");
+      setMsg("Permission granted. You can now create your raffle.");
     } catch (e: any) {
       const m = String(e?.reason || e?.shortMessage || e?.message || "");
       if (m.toLowerCase().includes("rejected")) setMsg("Action canceled.");
-      else setMsg("Could not set permission right now. Please try again.");
+      else setMsg("Could not grant permission right now. Please try again.");
     }
   }
 
-  function extractCreatedRaffleAddress(receiptLike: any): string | null {
-    try {
-      const receipt = receiptLike?.receipt ?? receiptLike;
-      const logs = receipt?.logs ?? receipt?.transactionReceipt?.logs ?? [];
-      if (!Array.isArray(logs) || logs.length === 0) return null;
-
-      const iface = new Interface(DEPLOYER_EVENT_ABI);
-      const event = iface.getEvent("LotteryDeployed");
-      const topic0 = (event as any).topicHash;
-
-      for (const log of logs) {
-        const addr = String(log?.address || "").toLowerCase();
-        if (addr !== String(ADDRESSES.SingleWinnerDeployer).toLowerCase()) continue;
-
-        const topics = log?.topics;
-        if (!topics?.length) continue;
-        if (String(topics[0]).toLowerCase() !== String(topic0).toLowerCase()) continue;
-
-        const parsed = iface.parseLog({ topics, data: log.data });
-        const lotteryAddr = String(parsed?.args?.lottery ?? parsed?.args?.[0] ?? "");
-        if (isHexAddress(lotteryAddr)) return lotteryAddr;
-      }
-
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  async function onLaunchRaffle() {
+  async function onCreate() {
     setMsg(null);
+    setCreatedRaffleId(null);
+    setCreatedTxHash(null);
 
     if (!me) return setMsg("Please sign in first.");
     if (!durOk) return setMsg("Duration must be between 5 minutes and 30 days.");
     if (!ticketsOk) return setMsg("Max tickets must be ≥ min tickets (or leave max empty for unlimited).");
     if (!minPurchaseOk) return setMsg("Min purchase must be ≤ max tickets (or keep max unlimited).");
-    if (requiredAllowanceU <= 0n) return setMsg("Winning pot must be greater than 0.");
-    if (!hasEnoughBalance) return setMsg("Not enough USDC for the winning pot deposit.");
-    if (!hasEnoughAllowance) return setMsg("Step 1 is required: enable prize deposit.");
+    if (requiredAllowanceU <= 0n) return setMsg("Prize must be greater than 0.");
+    if (!hasEnoughBalance) return setMsg("Not enough USDC for the prize.");
+    if (!hasEnoughAllowance) return setMsg("Please grant permission first.");
 
     try {
       const durationSeconds = BigInt(durationSecondsN);
@@ -292,19 +269,44 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
         params: [name.trim(), ticketPriceU, winningPotU, minT, maxT, durationSeconds, minPurchaseU32],
       });
 
-      const res = await sendAndConfirm(tx);
+      const res: any = await sendAndConfirm(tx);
 
-      const created = extractCreatedRaffleAddress(res);
-      if (created) {
-        setCreatedRaffleId(created);
-        setMsg("🎉 Your raffle is live! Share it with your friends.");
-      } else {
-        setMsg("🎉 Your raffle is live! (Couldn’t auto-detect the address.)");
-      }
+      // --- best effort: extract tx hash + new raffle address from logs ---
+      const txHash =
+        String(res?.transactionHash || res?.receipt?.transactionHash || res?.transactionReceipt?.transactionHash || "");
+      if (txHash) setCreatedTxHash(txHash);
 
+      let createdAddr: string | null = null;
+      const logs = res?.receipt?.logs || res?.transactionReceipt?.logs || res?.logs || [];
+      try {
+        for (const lg of logs) {
+          const topics = lg?.topics;
+          const dataHex = lg?.data;
+          if (!topics || !dataHex) continue;
+          try {
+            const parsed = DEPLOYER_EVENT_IFACE.parseLog({ topics, data: dataHex });
+            if (parsed?.name === "LotteryDeployed") {
+              const addr = String(parsed.args?.lottery || "");
+              if (isHexAddress(addr)) {
+                createdAddr = addr;
+                break;
+              }
+            }
+          } catch {
+            // ignore parse failures
+          }
+        }
+      } catch {}
+
+      if (createdAddr) setCreatedRaffleId(createdAddr);
+
+      setMsg("Raffle created 🎉");
       try {
         onCreated?.();
       } catch {}
+
+      // keep modal open so user can copy/share
+      // (they can close manually)
     } catch (e: any) {
       const m = String(e?.reason || e?.shortMessage || e?.message || "");
       if (m.toLowerCase().includes("rejected")) setMsg("Transaction canceled.");
@@ -312,80 +314,22 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     }
   }
 
-  async function onCopyShareLink() {
-    if (!createdRaffleId) return;
-    const url = `${window.location.origin}/raffle/${createdRaffleId}`;
+  async function copyToClipboard(text: string) {
     try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(text);
+      setMsg("Copied link ✅");
     } catch {
-      window.prompt("Copy this link:", url);
+      setMsg("Could not copy automatically. Please copy it manually.");
     }
   }
 
-  const previewRaffle: RaffleListItem = useMemo(() => {
-    const now = Math.floor(Date.now() / 1000);
-    const deadline = durOk ? String(now + durationSecondsN) : String(now + 3600);
-
-    const tp = sanitizeIntInput(ticketPrice || "0") || "0";
-    const wp = sanitizeIntInput(winningPot || "0") || "0";
-
-    const ticketPriceRaw = (() => {
-      try {
-        return String(parseUnits(tp, 6));
-      } catch {
-        return "0";
-      }
-    })();
-
-    const winningPotRaw = (() => {
-      try {
-        return String(parseUnits(wp, 6));
-      } catch {
-        return "0";
-      }
-    })();
-
-    const maxTicketsPreview = maxTickets.trim() === "" ? "0" : String(toIntStrict(maxTickets, 0));
-
-    return {
-      id: createdRaffleId || "0x0000000000000000000000000000000000000000",
-      name: name.trim() || "Your raffle name…",
-      status: "OPEN",
-      winningPot: winningPotRaw,
-      ticketPrice: ticketPriceRaw,
-      deadline,
-      sold: "0",
-      maxTickets: maxTicketsPreview,
-      protocolFeePercent: String(data?.protocolFeePercent ?? "0"),
-      feeRecipient: String(data?.feeRecipient ?? "0x0000000000000000000000000000000000000000"),
-      deployer: ADDRESSES.SingleWinnerDeployer,
-      lastUpdatedTimestamp: String(now),
-      creator: me || "0x0000000000000000000000000000000000000000",
-    } as any;
-  }, [
-    name,
-    ticketPrice,
-    winningPot,
-    maxTickets,
-    durOk,
-    durationSecondsN,
-    createdRaffleId,
-    me,
-    data?.protocolFeePercent,
-    data?.feeRecipient,
-  ]);
-
-  const shareUrl = createdRaffleId ? `${window.location.origin}/raffle/${createdRaffleId}` : null;
-
   if (!open) return null;
 
-  // ---------- Premium UI styles ----------
+  // ----------------- STYLE: premium light modal + section tones -----------------
   const overlay: React.CSSProperties = {
     position: "fixed",
     inset: 0,
-    background: "rgba(2, 6, 23, 0.6)",
+    background: "rgba(0,0,0,0.45)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -394,461 +338,623 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   };
 
   const modal: React.CSSProperties = {
-    width: "min(1060px, 100%)",
+    width: "min(980px, 100%)",
     maxHeight: "calc(100vh - 32px)",
-    background: "#ffffff",
-    color: "#0f172a",
-    borderRadius: 20,
-    border: "1px solid rgba(15, 23, 42, 0.10)",
-    boxShadow: "0 35px 100px rgba(0,0,0,0.45)",
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
+    overflow: "auto",
+    borderRadius: 22,
+    background: "rgba(255,255,255,0.96)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    boxShadow: "0 18px 60px rgba(0,0,0,0.30)",
+    color: "rgba(20,20,28,0.92)",
+  };
+
+  const modalInner: React.CSSProperties = {
+    padding: 18,
   };
 
   const header: React.CSSProperties = {
-    padding: "18px 20px",
-    borderBottom: "1px solid rgba(15, 23, 42, 0.10)",
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 16,
+    justifyContent: "space-between",
+    gap: 12,
+    paddingBottom: 14,
+    borderBottom: "1px solid rgba(0,0,0,0.06)",
   };
 
   const title: React.CSSProperties = {
+    fontSize: 22,
+    fontWeight: 950,
+    letterSpacing: 0.2,
     margin: 0,
-    fontSize: 20,
-    fontWeight: 1000,
-    letterSpacing: -0.2,
   };
 
   const subtitle: React.CSSProperties = {
-    marginTop: 6,
     fontSize: 13,
-    color: "rgba(15, 23, 42, 0.70)",
+    opacity: 0.8,
+    marginTop: 6,
     lineHeight: 1.35,
-    maxWidth: 520,
-  };
-
-  const tag: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: 999,
-    padding: "6px 10px",
-    background: "rgba(2, 6, 23, 0.04)",
-    border: "1px solid rgba(2, 6, 23, 0.10)",
-    fontSize: 12,
-    fontWeight: 900,
-    color: "rgba(15, 23, 42, 0.80)",
-    width: "fit-content",
   };
 
   const closeBtn: React.CSSProperties = {
-    borderRadius: 12,
-    border: "1px solid rgba(15, 23, 42, 0.14)",
-    background: "rgba(15, 23, 42, 0.04)",
+    border: "1px solid rgba(0,0,0,0.10)",
+    background: "rgba(255,255,255,0.9)",
+    borderRadius: 14,
     padding: "10px 12px",
     cursor: "pointer",
-    fontWeight: 950,
-    color: "#0f172a",
-    whiteSpace: "nowrap",
+    fontWeight: 900,
   };
 
-  const body: React.CSSProperties = {
-    padding: 18,
-    overflowY: "auto",
+  const layout: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "1.15fr 0.85fr",
+    gap: 14,
+    marginTop: 14,
   };
 
-  const layout: React.CSSProperties =
-    typeof window !== "undefined" && window.innerWidth < 980
-      ? { display: "grid", gridTemplateColumns: "1fr", gap: 14 }
-      : { display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 14 };
-
-  const section: React.CSSProperties = {
-    background: "#ffffff",
-    border: "1px solid rgba(15, 23, 42, 0.10)",
-    borderRadius: 16,
-    boxShadow: "0 10px 30px rgba(2,6,23,0.06)",
-    overflow: "hidden",
+  const sectionBase: React.CSSProperties = {
+    borderRadius: 18,
+    border: "1px solid rgba(0,0,0,0.06)",
+    padding: 14,
   };
 
-  const sectionHead: React.CSSProperties = {
-    padding: "14px 14px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    borderBottom: "1px solid rgba(15, 23, 42, 0.08)",
-    background: "rgba(2, 6, 23, 0.02)",
-  };
+  const sectionA: React.CSSProperties = { ...sectionBase, background: "rgba(0,0,0,0.02)" };
+  const sectionB: React.CSSProperties = { ...sectionBase, background: "rgba(0,0,0,0.035)" };
+  const sectionC: React.CSSProperties = { ...sectionBase, background: "rgba(0,0,0,0.025)" };
 
   const sectionTitle: React.CSSProperties = {
-    margin: 0,
-    fontSize: 14,
-    fontWeight: 1000,
-    letterSpacing: -0.1,
-  };
-
-  const sectionBody: React.CSSProperties = {
-    padding: 14,
-    display: "grid",
-    gap: 12,
-  };
-
-  const label: React.CSSProperties = {
-    fontSize: 12,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
     fontWeight: 950,
-    color: "rgba(15, 23, 42, 0.80)",
+    letterSpacing: 0.2,
+    fontSize: 14,
+    marginBottom: 10,
   };
 
-  const fieldHint: React.CSSProperties = {
-    marginTop: 6,
+  const smallPill: React.CSSProperties = {
+    borderRadius: 999,
+    padding: "6px 10px",
+    border: "1px solid rgba(0,0,0,0.08)",
+    background: "rgba(255,255,255,0.9)",
     fontSize: 12,
-    color: "rgba(15, 23, 42, 0.62)",
-    lineHeight: 1.35,
+    fontWeight: 900,
+    opacity: 0.9,
   };
 
-  const controlBase: React.CSSProperties = {
-    marginTop: 8,
-    width: "100%",
-    borderRadius: 12,
-    border: "1px solid rgba(15, 23, 42, 0.14)",
-    background: "#ffffff",
-    padding: "11px 12px",
-    height: 44,
-    lineHeight: "22px",
-    outline: "none",
-    fontWeight: 850,
-    color: "#0f172a",
-  };
-
-  const input = controlBase;
-  const select = { ...controlBase, cursor: "pointer", paddingRight: 34 } as React.CSSProperties;
-
-  const formGrid: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+  const row: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
     gap: 12,
+    fontSize: 13,
+    lineHeight: 1.35,
+    marginTop: 8,
   };
 
-  const durationGrid: React.CSSProperties = {
+  const label: React.CSSProperties = { opacity: 0.72 };
+
+  const linkStyle: React.CSSProperties = {
+    fontWeight: 900,
+    color: "rgba(20,20,28,0.92)",
+    textDecoration: "underline",
+    textUnderlineOffset: 3,
+  };
+
+  const inputLabel: React.CSSProperties = {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: 900,
+    opacity: 0.85,
+  };
+
+  const input: React.CSSProperties = {
+    width: "100%",
+    border: "1px solid rgba(0,0,0,0.10)",
+    background: "rgba(255,255,255,0.92)",
+    borderRadius: 14,
+    padding: "12px 12px",
+    outline: "none",
+    color: "rgba(20,20,28,0.92)",
+    fontWeight: 800,
+  };
+
+  const grid2: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: 10,
+    marginTop: 10,
   };
 
-  const chipsRow: React.CSSProperties = {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 8,
+  const grid3: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: 10,
+    marginTop: 10,
   };
 
-  const chip: React.CSSProperties = {
-    borderRadius: 999,
-    padding: "6px 10px",
-    border: "1px solid rgba(15, 23, 42, 0.10)",
-    background: "rgba(2, 6, 23, 0.03)",
+  const selectStyle: React.CSSProperties = {
+    ...input,
+    cursor: "pointer",
+    paddingRight: 12,
+  };
+
+  const hint: React.CSSProperties = {
+    marginTop: 8,
     fontSize: 12,
+    opacity: 0.75,
+    lineHeight: 1.35,
+  };
+
+  const dangerText: React.CSSProperties = {
+    marginTop: 10,
+    fontSize: 13,
     fontWeight: 950,
-    color: "rgba(15, 23, 42, 0.78)",
+    color: "#b42318",
+    textAlign: "center",
   };
 
   const btnBase: React.CSSProperties = {
     width: "100%",
-    borderRadius: 14,
+    borderRadius: 16,
     padding: "12px 14px",
-    fontWeight: 1000,
-    border: "1px solid rgba(15, 23, 42, 0.14)",
+    fontWeight: 950,
+    letterSpacing: 0.2,
+    textAlign: "center",
+    transition: "transform 120ms ease, opacity 120ms ease",
   };
 
-  const btnPrimary: React.CSSProperties = {
+  const btnSecondaryEnabled: React.CSSProperties = {
     ...btnBase,
     cursor: "pointer",
-    background: "#0f172a",
-    color: "#ffffff",
+    border: "1px solid rgba(0,0,0,0.10)",
+    background: "rgba(255,255,255,0.92)",
   };
 
-  const btnSoft: React.CSSProperties = {
+  const btnPrimaryEnabled: React.CSSProperties = {
     ...btnBase,
     cursor: "pointer",
-    background: "rgba(15, 23, 42, 0.04)",
-    color: "#0f172a",
+    border: "1px solid rgba(0,0,0,0.12)",
+    background: "rgba(0,0,0,0.06)",
   };
 
   const btnDisabled: React.CSSProperties = {
     ...btnBase,
     cursor: "not-allowed",
-    opacity: 0.6,
-    background: "rgba(15, 23, 42, 0.03)",
-    color: "rgba(15, 23, 42, 0.70)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    background: "rgba(0,0,0,0.03)",
+    opacity: 0.55,
   };
 
-  const stickyPreview: React.CSSProperties =
-    typeof window !== "undefined" && window.innerWidth >= 980
-      ? { position: "sticky", top: 12, alignSelf: "start" }
-      : {};
+  // ----------------- preview values -----------------
+  const preview = useMemo(() => {
+    const tp = toIntStrict(ticketPrice, 0);
+    const pot = toIntStrict(winningPot, 0);
+
+    const minTShow = String(minT);
+    const maxTShow = maxTicketsIsUnlimited ? "Unlimited" : String(maxT);
+    const ends = durOk ? durationHint.replace("Ends at: ", "") : "—";
+
+    return {
+      name: name.trim() || "Your raffle name",
+      ticketPrice: tp,
+      winningPot: pot,
+      minTickets: minTShow,
+      maxTickets: maxTShow,
+      ends,
+    };
+  }, [name, ticketPrice, winningPot, minT, maxT, maxTicketsIsUnlimited, durOk, durationHint]);
+
+  const permissionReady = hasEnoughAllowance && requiredAllowanceU > 0n;
+
+  const shareUrl = useMemo(() => {
+    if (!createdRaffleId) return null;
+    try {
+      return `${window.location.origin}/raffle/${createdRaffleId}`;
+    } catch {
+      return `/raffle/${createdRaffleId}`;
+    }
+  }, [createdRaffleId]);
+
+  const network = {
+    deployer: ADDRESSES.SingleWinnerDeployer,
+    usdc: data?.usdc || ADDRESSES.USDC,
+    entropy: data?.entropy || null,
+    entropyProvider: data?.entropyProvider || null,
+    feeRecipient: data?.feeRecipient || null,
+  };
 
   return (
     <div style={overlay} onMouseDown={onClose}>
       <div style={modal} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div style={header}>
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={tag}>Network: {ETHERLINK_MAINNET.chainName}</div>
-            <h2 style={title}>Create a raffle</h2>
-            <div style={subtitle}>
-              Step 1 enables the prize deposit. Step 2 launches your raffle. You confirm both in your wallet.
+        <div style={modalInner}>
+          {/* Header */}
+          <div style={header}>
+            <div>
+              <h3 style={title}>Create a raffle</h3>
+              <div style={subtitle}>
+                You’ll always confirm actions in your wallet. This app never acts automatically.
+              </div>
             </div>
+
+            <button onClick={onClose} style={closeBtn} aria-label="Close">
+              Close
+            </button>
           </div>
 
-          <button onClick={onClose} style={closeBtn}>
-            {createdRaffleId ? "Done" : "Close"}
-          </button>
-        </div>
-
-        <div style={body}>
           <div style={layout}>
-            {/* LEFT COLUMN */}
-            <div style={{ minWidth: 0, display: "grid", gap: 14 }}>
+            {/* LEFT: form */}
+            <div style={{ display: "grid", gap: 12 }}>
               {/* Network settings */}
-              <div style={section}>
-                <div style={sectionHead}>
-                  <h3 style={sectionTitle}>Network settings</h3>
-                  <span style={chip}>{loading ? "Loading…" : data ? "Up to date" : "Unavailable"}</span>
+              <div style={sectionA}>
+                <div style={sectionTitle}>
+                  <span>Network settings</span>
+                  <span style={smallPill}>{loading ? "Loading…" : data ? "Connected" : "Unavailable"}</span>
                 </div>
 
-                <div style={sectionBody}>
-                  {note && <div style={{ fontSize: 13, color: "rgba(15, 23, 42, 0.75)" }}>{note}</div>}
+                {note && <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>{note}</div>}
 
-                  <div style={{ display: "grid", gap: 8, fontSize: 13, color: "rgba(15, 23, 42, 0.80)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <span>Ppopgi fee</span>
-                      <b style={{ color: "#0f172a" }}>{data ? `${data.protocolFeePercent}%` : "—"}</b>
-                    </div>
+                <div style={row}>
+                  <div style={label}>Network</div>
+                  <div style={{ fontWeight: 900 }}>{ETHERLINK_MAINNET.chainName}</div>
+                </div>
 
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <span>Fee receiver</span>
-                      <b style={{ color: "#0f172a" }}>{data ? short(data.feeRecipient) : "—"}</b>
-                    </div>
-
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <span>USDC contract</span>
-                      <b style={{ color: "#0f172a" }}>{data ? short(data.usdc) : "—"}</b>
-                    </div>
+                <div style={row}>
+                  <div style={label}>Deployer</div>
+                  <div style={{ fontWeight: 900 }}>
+                    {isHexAddress(network.deployer) ? (
+                      <a href={explorerAddressUrl(network.deployer)} target="_blank" rel="noreferrer" style={linkStyle}>
+                        {short(network.deployer)}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
                   </div>
-
-                  <div style={fieldHint}>These are read from the blockchain and can’t be changed.</div>
                 </div>
+
+                <div style={row}>
+                  <div style={label}>USDC token</div>
+                  <div style={{ fontWeight: 900 }}>
+                    {network.usdc && isHexAddress(network.usdc) ? (
+                      <a href={explorerAddressUrl(network.usdc)} target="_blank" rel="noreferrer" style={linkStyle}>
+                        {short(network.usdc)}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </div>
+                </div>
+
+                <div style={row}>
+                  <div style={label}>Entropy contract</div>
+                  <div style={{ fontWeight: 900 }}>
+                    {network.entropy && isHexAddress(network.entropy) ? (
+                      <a href={explorerAddressUrl(network.entropy)} target="_blank" rel="noreferrer" style={linkStyle}>
+                        {short(network.entropy)}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </div>
+                </div>
+
+                <div style={row}>
+                  <div style={label}>Entropy provider</div>
+                  <div style={{ fontWeight: 900 }}>
+                    {network.entropyProvider && isHexAddress(network.entropyProvider) ? (
+                      <a
+                        href={explorerAddressUrl(network.entropyProvider)}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={linkStyle}
+                      >
+                        {short(network.entropyProvider)}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </div>
+                </div>
+
+                <div style={row}>
+                  <div style={label}>Fee receiver</div>
+                  <div style={{ fontWeight: 900 }}>
+                    {network.feeRecipient && isHexAddress(network.feeRecipient) ? (
+                      <a
+                        href={explorerAddressUrl(network.feeRecipient)}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={linkStyle}
+                      >
+                        {short(network.feeRecipient)}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </div>
+                </div>
+
+                <div style={hint}>These are read from the blockchain and can’t be changed in the app.</div>
               </div>
 
               {/* Raffle details */}
-              <div style={section}>
-                <div style={sectionHead}>
-                  <h3 style={sectionTitle}>Raffle details</h3>
-                  <button style={btnSoft} onClick={() => setAdvancedOpen((v) => !v)} type="button">
-                    {advancedOpen ? "Hide advanced" : "Show advanced"}
-                  </button>
+              <div style={sectionB}>
+                <div style={sectionTitle}>
+                  <span>Raffle details</span>
+                  <span style={smallPill}>Preview updates live</span>
                 </div>
 
-                <div style={sectionBody}>
-                  {/* Name */}
+                <div style={inputLabel}>Name</div>
+                <input
+                  style={input}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Ppopgi #12"
+                />
+
+                <div style={grid2}>
                   <div>
-                    <div style={label}>Name</div>
+                    <div style={inputLabel}>Ticket price (USDC)</div>
                     <input
                       style={input}
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Ppopgi #12"
+                      value={ticketPrice}
+                      onChange={(e) => setTicketPrice(sanitizeIntInput(e.target.value))}
+                      inputMode="numeric"
+                      placeholder="e.g. 1"
+                    />
+                    <div style={hint}>Whole numbers only.</div>
+                  </div>
+
+                  <div>
+                    <div style={inputLabel}>Prize (USDC)</div>
+                    <input
+                      style={input}
+                      value={winningPot}
+                      onChange={(e) => setWinningPot(sanitizeIntInput(e.target.value))}
+                      inputMode="numeric"
+                      placeholder="e.g. 100"
+                    />
+                    <div style={hint}>This is the USDC you deposit when creating.</div>
+                  </div>
+                </div>
+
+                {/* Duration condensed */}
+                <div style={grid3}>
+                  <div>
+                    <div style={inputLabel}>Duration</div>
+                    <input
+                      style={input}
+                      value={durationValue}
+                      onChange={(e) => setDurationValue(sanitizeIntInput(e.target.value))}
+                      inputMode="numeric"
+                      placeholder="24"
                     />
                   </div>
-
-                  {/* Price + Pot */}
-                  <div style={formGrid}>
-                    <div>
-                      <div style={label}>Ticket price (USDC)</div>
-                      <input
-                        style={input}
-                        value={ticketPrice}
-                        onChange={(e) => setTicketPrice(sanitizeIntInput(e.target.value))}
-                        inputMode="numeric"
-                        placeholder="1"
-                      />
-                      <div style={fieldHint}>Whole numbers only.</div>
-                    </div>
-
-                    <div>
-                      <div style={label}>Winning pot (USDC)</div>
-                      <input
-                        style={input}
-                        value={winningPot}
-                        onChange={(e) => setWinningPot(sanitizeIntInput(e.target.value))}
-                        inputMode="numeric"
-                        placeholder="100"
-                      />
-                      <div style={fieldHint}>Deposited when launching.</div>
-                    </div>
-                  </div>
-
-                  {/* Duration (compact, not full width waste) */}
                   <div>
-                    <div style={label}>Duration</div>
-                    <div style={{ ...durationGrid, marginTop: 8 }}>
-                      <input
-                        style={input}
-                        value={durationValue}
-                        onChange={(e) => setDurationValue(sanitizeIntInput(e.target.value))}
-                        inputMode="numeric"
-                        placeholder="24"
-                      />
-                      <select
-                        style={select}
-                        value={durationUnit}
-                        onChange={(e) => setDurationUnit(e.target.value as any)}
-                      >
-                        <option value="minutes">Minutes</option>
-                        <option value="hours">Hours</option>
-                        <option value="days">Days</option>
-                      </select>
-                    </div>
-                    <div style={fieldHint}>{durationHint}</div>
+                    <div style={inputLabel}>Unit</div>
+                    <select style={selectStyle} value={durationUnit} onChange={(e) => setDurationUnit(e.target.value as any)}>
+                      <option value="minutes">Minutes</option>
+                      <option value="hours">Hours</option>
+                      <option value="days">Days</option>
+                    </select>
                   </div>
+                  <div>
+                    <div style={inputLabel}>Ends</div>
+                    <div style={{ ...input, display: "flex", alignItems: "center", fontWeight: 900, opacity: 0.9 }}>
+                      {durOk ? preview.ends : "—"}
+                    </div>
+                  </div>
+                </div>
 
-                  {/* Advanced */}
+                <div style={hint}>{durationHint}</div>
+
+                {/* Advanced toggle (ONLY expandable) */}
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    style={btnSecondaryEnabled}
+                    onClick={() => setAdvancedOpen((v) => !v)}
+                    type="button"
+                  >
+                    {advancedOpen ? "Hide advanced settings" : "Show advanced settings"}
+                  </button>
+
                   {advancedOpen && (
-                    <div style={{ display: "grid", gap: 12, paddingTop: 2 }}>
-                      <div style={formGrid}>
-                        <div>
-                          <div style={label}>Min tickets</div>
+                    <div style={{ marginTop: 12 }}>
+                      <div style={sectionC}>
+                        <div style={sectionTitle}>
+                          <span>Advanced settings</span>
+                          <span style={smallPill}>Optional</span>
+                        </div>
+
+                        <div style={grid2}>
+                          <div>
+                            <div style={inputLabel}>Min tickets</div>
+                            <input
+                              style={input}
+                              value={minTickets}
+                              onChange={(e) => setMinTickets(sanitizeIntInput(e.target.value))}
+                              inputMode="numeric"
+                              placeholder="1"
+                            />
+                            <div style={hint}>Raffle can only finalize after this many tickets are sold.</div>
+                          </div>
+
+                          <div>
+                            <div style={inputLabel}>Max tickets</div>
+                            <input
+                              style={input}
+                              value={maxTickets}
+                              onChange={(e) => setMaxTickets(sanitizeIntInput(e.target.value))}
+                              inputMode="numeric"
+                              placeholder="Unlimited"
+                            />
+                            <div style={hint}>{maxTickets.trim() === "" ? "Unlimited" : `Cap: ${maxTickets}`}</div>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 10 }}>
+                          <div style={inputLabel}>Min purchase (tickets)</div>
                           <input
                             style={input}
-                            value={minTickets}
-                            onChange={(e) => setMinTickets(sanitizeIntInput(e.target.value))}
+                            value={minPurchaseAmount}
+                            onChange={(e) => setMinPurchaseAmount(sanitizeIntInput(e.target.value))}
                             inputMode="numeric"
                             placeholder="1"
                           />
+                          <div style={hint}>Minimum tickets a user must buy per purchase.</div>
                         </div>
-
-                        <div>
-                          <div style={label}>Max tickets</div>
-                          <input
-                            style={input}
-                            value={maxTickets}
-                            onChange={(e) => setMaxTickets(sanitizeIntInput(e.target.value))}
-                            inputMode="numeric"
-                            placeholder="Unlimited"
-                          />
-                          <div style={fieldHint}>{maxTickets.trim() === "" ? "Unlimited" : `Cap: ${maxTickets}`}</div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={label}>Min purchase (tickets)</div>
-                        <input
-                          style={input}
-                          value={minPurchaseAmount}
-                          onChange={(e) => setMinPurchaseAmount(sanitizeIntInput(e.target.value))}
-                          inputMode="numeric"
-                          placeholder="1"
-                        />
-                      </div>
-
-                      {/* Optional: only in advanced, explain the allowance concept in plain words */}
-                      <div style={fieldHint}>
-                        “Prize deposit permission” is an approval. It can be higher than your wallet balance because it’s
-                        a permission — not a payment.
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Status chips */}
-                  <div style={chipsRow}>
-                    <span style={chip}>
-                      Prize deposit:{" "}
-                      {me ? (allowLoading ? "Checking…" : hasEnoughAllowance ? "✅ Ready" : "❌ Needs setup") : "Sign in"}
-                    </span>
-
-                    <span style={chip}>
-                      Wallet:{" "}
-                      {me ? (allowLoading ? "…" : usdcBal !== null ? `${fmtUsdc(usdcBal)} USDC` : "—") : "—"}
-                    </span>
-
-                    <span style={chip}>Required: {fmtUsdc(requiredAllowanceU)} USDC</span>
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <button
-                      style={needsAllow ? btnSoft : btnDisabled}
-                      disabled={!needsAllow}
-                      onClick={onEnablePrizeDeposit}
-                      type="button"
-                    >
-                      {isPending ? "Confirming…" : me ? "Step 1 — Enable prize deposit" : "Sign in to continue"}
-                    </button>
-
-                    <button
-                      style={canSubmit ? btnPrimary : btnDisabled}
-                      disabled={!canSubmit}
-                      onClick={onLaunchRaffle}
-                      type="button"
-                    >
-                      {isPending ? "Creating…" : me ? "Step 2 — Launch raffle" : "Sign in to launch"}
-                    </button>
-                  </div>
-
-                  {!hasEnoughBalance && requiredAllowanceU > 0n && (
-                    <div style={{ fontSize: 13, color: "rgba(15, 23, 42, 0.85)", fontWeight: 900 }}>
-                      Not enough USDC for the winning pot deposit.
-                    </div>
-                  )}
-
-                  {msg && <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 1000 }}>{msg}</div>}
-
-                  {shareUrl && (
-                    <div
-                      style={{
-                        padding: 12,
-                        borderRadius: 14,
-                        border: "1px solid rgba(15, 23, 42, 0.10)",
-                        background: "rgba(2, 6, 23, 0.02)",
-                      }}
-                    >
-                      <div style={{ fontWeight: 1000 }}>Share your raffle</div>
-                      <div style={{ marginTop: 6, fontSize: 13, color: "rgba(15, 23, 42, 0.70)" }}>
-                        Copy this link and send it to a friend:
-                      </div>
-
-                      <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
-                        <input style={input} value={shareUrl} readOnly />
-                        <button style={btnPrimary} onClick={onCopyShareLink} type="button">
-                          {copied ? "Copied!" : "Copy link"}
-                        </button>
-                      </div>
-
-                      <div style={{ marginTop: 8, fontSize: 12, color: "rgba(15, 23, 42, 0.65)" }}>
-                        Raffle address: <b>{short(createdRaffleId)}</b>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* Funding + actions */}
+              <div style={sectionA}>
+                <div style={sectionTitle}>
+                  <span>Funding & confirmation</span>
+                  <span style={smallPill}>{permissionReady ? "Ready" : "Needs permission"}</span>
+                </div>
+
+                {me && (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+                    <span style={smallPill}>
+                      {allowLoading ? "Checking…" : usdcBal !== null ? `Your USDC: ${fmtUsdc(usdcBal)}` : "Your USDC: —"}
+                    </span>
+                    <span style={smallPill}>
+                      {requiredAllowanceU > 0n
+                        ? permissionReady
+                          ? "Spending permission: granted"
+                          : "Spending permission: not granted"
+                        : "Spending permission: —"}
+                    </span>
+                  </div>
+                )}
+
+                {!hasEnoughBalance && requiredAllowanceU > 0n && <div style={dangerText}>Not enough USDC for the prize.</div>}
+
+                <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                  <button
+                    style={needsPermission ? btnSecondaryEnabled : btnDisabled}
+                    disabled={!needsPermission}
+                    onClick={onGrantPermission}
+                    title="This lets the deployer deposit the prize USDC when you create."
+                  >
+                    {isPending ? "Confirming…" : me ? "Grant permission to deposit prize" : "Sign in to continue"}
+                  </button>
+
+                  <button style={canSubmit ? btnPrimaryEnabled : btnDisabled} disabled={!canSubmit} onClick={onCreate}>
+                    {isPending ? "Creating…" : me ? "Create raffle" : "Sign in to create"}
+                  </button>
+                </div>
+
+                {msg && (
+                  <div style={{ marginTop: 12, fontSize: 13, fontWeight: 950, opacity: 0.92 }}>
+                    {msg}
+                  </div>
+                )}
+
+                {/* Share block after create */}
+                {(shareUrl || createdTxHash) && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 950, marginBottom: 8 }}>Share</div>
+
+                    {shareUrl ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <div style={{ ...input, fontWeight: 800, display: "flex", alignItems: "center" }}>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{shareUrl}</span>
+                        </div>
+                        <button style={btnSecondaryEnabled} onClick={() => copyToClipboard(shareUrl)}>
+                          Copy share link
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {createdTxHash ? (
+                      <div style={{ marginTop: 10, fontSize: 13 }}>
+                        Transaction:{" "}
+                        <a href={explorerTxUrl(createdTxHash)} target="_blank" rel="noreferrer" style={linkStyle}>
+                          View on explorer
+                        </a>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                <div style={hint}>
+                  Nothing happens automatically — you approve each step in your wallet.
+                </div>
+              </div>
             </div>
 
-            {/* RIGHT COLUMN (Preview) */}
-            <div style={{ minWidth: 0, ...stickyPreview }}>
-              <div style={section}>
-                <div style={sectionHead}>
-                  <h3 style={sectionTitle}>Preview</h3>
-                  <span style={chip}>Updates as you type</span>
+            {/* RIGHT: preview card */}
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={sectionB}>
+                <div style={sectionTitle}>
+                  <span>Preview</span>
+                  <span style={smallPill}>Card</span>
                 </div>
-                <div style={sectionBody}>
-                  <RaffleCard raffle={previewRaffle as any} onOpen={() => {}} />
-                  <div style={fieldHint}>
-                    Preview only. Final values come from your transaction + the network.
+
+                <div
+                  style={{
+                    borderRadius: 18,
+                    border: "1px solid rgba(0,0,0,0.08)",
+                    background: "rgba(255,255,255,0.95)",
+                    padding: 14,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ fontSize: 16, fontWeight: 950 }}>{preview.name}</div>
+
+                  <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span style={{ opacity: 0.75 }}>Prize</span>
+                      <span style={{ fontWeight: 950 }}>{preview.winningPot} USDC</span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span style={{ opacity: 0.75 }}>Ticket</span>
+                      <span style={{ fontWeight: 950 }}>{preview.ticketPrice} USDC</span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span style={{ opacity: 0.75 }}>Ends</span>
+                      <span style={{ fontWeight: 900, textAlign: "right" }}>{durOk ? preview.ends : "—"}</span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span style={{ opacity: 0.75 }}>Min tickets</span>
+                      <span style={{ fontWeight: 900 }}>{preview.minTickets}</span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span style={{ opacity: 0.75 }}>Max tickets</span>
+                      <span style={{ fontWeight: 900 }}>{preview.maxTickets}</span>
+                    </div>
                   </div>
+
+                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75, lineHeight: 1.35 }}>
+                    This is a preview. Final card data comes from the blockchain & indexer after creation.
+                  </div>
+                </div>
+              </div>
+
+              <div style={sectionA}>
+                <div style={sectionTitle}>
+                  <span>Tips</span>
+                  <span style={smallPill}>Quick</span>
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.45 }}>
+                  <div>• “Permission to deposit prize” is like a one-time spending permission.</div>
+                  <div>• Your balance and your permission can be different values — that’s normal.</div>
+                  <div>• If you change the prize, you may need to grant permission again.</div>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* bottom padding so scroll never cuts content */}
+          <div style={{ height: 6 }} />
         </div>
       </div>
     </div>
