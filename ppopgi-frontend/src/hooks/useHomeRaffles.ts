@@ -11,6 +11,15 @@ function numOr0(v?: string | null) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// ✅ V2 deployer (exclude everything else = V1)
+const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
+function norm(a: string) {
+  return a.trim().toLowerCase();
+}
+function isV2(r: RaffleListItem) {
+  return norm(r.deployer ?? "") === norm(V2_DEPLOYER);
+}
+
 export function useHomeRaffles() {
   const [items, setItems] = useState<RaffleListItem[] | null>(null);
   const [mode, setMode] = useState<Mode>("indexer");
@@ -35,7 +44,9 @@ export function useHomeRaffles() {
         if (!alive) return;
         setMode("indexer");
         setNote(null);
-        setItems(data);
+
+        // ✅ Filter out V1
+        setItems(data.filter(isV2));
         return;
       } catch {
         // fall through
@@ -50,7 +61,8 @@ export function useHomeRaffles() {
         const data = await fetchRafflesOnChainFallback(120);
         if (!alive) return;
 
-        setItems(data);
+        // ✅ Filter out V1 here too
+        setItems(data.filter(isV2));
       } catch {
         if (!alive) return;
         setNote("Could not load raffles right now. Please refresh.");
@@ -64,7 +76,8 @@ export function useHomeRaffles() {
     };
   }, [refreshKey]);
 
-  const all = useMemo(() => items ?? [], [items]);
+  // ✅ Always work from V2-only set (even if something slips through)
+  const all = useMemo(() => (items ?? []).filter(isV2), [items]);
 
   const active = useMemo(() => {
     return all.filter((r) => r.status === "OPEN" || r.status === "FUNDING_PENDING");
@@ -92,7 +105,6 @@ export function useHomeRaffles() {
 
   // ✅ Recently finalized/settled: top 5 COMPLETED by completedAt (fallback to finalizedAt)
   const recentlyFinalized = useMemo(() => {
-    // In live fallback mode, these timestamps might not exist → return empty list (calm degradation).
     if (mode === "live") return [];
 
     const settled = all.filter((r) => r.status === "COMPLETED");
@@ -101,10 +113,10 @@ export function useHomeRaffles() {
       .sort((a, b) => {
         const aKey = numOr0(a.completedAt) || numOr0(a.finalizedAt) || numOr0(a.lastUpdatedTimestamp);
         const bKey = numOr0(b.completedAt) || numOr0(b.finalizedAt) || numOr0(b.lastUpdatedTimestamp);
-        return bKey - aKey; // newest first
+        return bKey - aKey;
       })
       .slice(0, 5);
   }, [all, mode]);
 
-  return { items, bigPrizes, endingSoon, recentlyFinalized, mode, note, refetch };
+  return { items: all, bigPrizes, endingSoon, recentlyFinalized, mode, note, refetch };
 }
