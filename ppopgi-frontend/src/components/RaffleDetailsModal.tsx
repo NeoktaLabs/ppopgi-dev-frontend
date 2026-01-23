@@ -17,6 +17,8 @@ type Props = {
   onClose: () => void;
 };
 
+const ZERO = "0x0000000000000000000000000000000000000000";
+
 function fmtUsdc(raw: string) {
   try {
     return formatUnits(BigInt(raw || "0"), 6);
@@ -32,7 +34,7 @@ function short(a: string) {
 
 function isZeroAddr(a?: string | null) {
   if (!a) return true;
-  return a.toLowerCase() === "0x0000000000000000000000000000000000000000";
+  return a.toLowerCase() === ZERO;
 }
 
 function toInt(v: string, fallback = 0) {
@@ -171,6 +173,13 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
   const deadlinePassed = deadlineMs > 0 ? nowMs >= deadlineMs : false;
 
+  // ✅ V2 min purchase (typed)
+  const minBuy = useMemo(() => {
+    const v = Number(data?.minPurchaseAmount ?? "1");
+    if (!Number.isFinite(v) || v <= 0) return 1;
+    return Math.floor(v);
+  }, [data?.minPurchaseAmount]);
+
   // ✅ Same “Finalizing” logic as RaffleCard:
   const displayStatus: DisplayStatus = useMemo(() => {
     if (!data) return "Unknown";
@@ -180,6 +189,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
   const status = statusTheme(displayStatus);
 
+  // ✅ Only truly joinable when OPEN, not paused, and not past deadline
   const raffleIsOpen = !!data && data.status === "OPEN" && !data.paused && !deadlinePassed;
 
   const raffleNotJoinableReason = useMemo(() => {
@@ -190,7 +200,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     return null;
   }, [data, deadlinePassed]);
 
-  // ✅ always build a clean share/copy URL: ONLY ?raffle=0x...
+  // ✅ clean share/copy URL: ONLY ?raffle=0x...
   const shareUrl = useMemo(() => {
     if (!raffleId) return null;
     const u = new URL(window.location.href);
@@ -239,13 +249,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
       address: addr,
     });
   }, [data?.usdcToken]);
-
-  // ✅ V2 min purchase
-  const minBuy = useMemo(() => {
-    const v = Number((data as any)?.minPurchaseAmount ?? "1");
-    if (!Number.isFinite(v) || v <= 0) return 1;
-    return Math.floor(v);
-  }, [data]);
 
   // ---------- ticket input bounds (UX-safe) ----------
   const soldNow = data ? Number(data.sold || "0") : 0;
@@ -707,7 +710,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
         <div style={tearLine} />
 
-        {/* Top stats (same as card tiles) */}
+        {/* Top stats */}
         <div style={grid2}>
           <div style={mini}>
             <div style={miniLabel}>Ticket price</div>
@@ -729,7 +732,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
         <div style={grid3}>
           <div style={mini}>
             <div style={miniLabel}>Revenue</div>
-            <div style={miniValue}>{fmtUsdc((data as any)?.ticketRevenue || "0")} USDC</div>
+            <div style={miniValue}>{fmtUsdc(data?.ticketRevenue || "0")} USDC</div>
             <div style={hint}>From tickets sold</div>
           </div>
 
@@ -750,7 +753,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
         {loading && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85, color: inkStrong }}>Loading live details…</div>}
         {note && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9, color: inkStrong }}>{note}</div>}
 
-        {/* Safety panel (RaffleCard-ish panel style) */}
+        {/* Safety panel */}
         {data && safetyOpen && (
           <div style={section}>
             <div style={panel} role="region" aria-label="Safety info">
@@ -768,22 +771,32 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
               <div style={row}>
                 <div style={label}>Entropy</div>
-                <div style={value}>{isZeroAddr((data as any)?.entropy) ? "—" : short((data as any)?.entropy)}</div>
+                <div style={value}>{isZeroAddr(data.entropy) ? "—" : short(data.entropy)}</div>
               </div>
 
               <div style={row}>
                 <div style={label}>Entropy provider</div>
-                <div style={value}>{isZeroAddr((data as any)?.entropyProvider) ? "—" : short((data as any)?.entropyProvider)}</div>
+                <div style={value}>{isZeroAddr(data.entropyProvider) ? "—" : short(data.entropyProvider)}</div>
               </div>
 
               <div style={row}>
                 <div style={label}>Callback gas</div>
-                <div style={value}>{String((data as any)?.callbackGasLimit ?? "—")}</div>
+                <div style={value}>{data.callbackGasLimit}</div>
               </div>
 
               <div style={row}>
                 <div style={label}>Finalize request</div>
-                <div style={value}>{String((data as any)?.finalizeRequestId ?? "0")}</div>
+                <div style={value}>{data.finalizeRequestId}</div>
+              </div>
+
+              <div style={row}>
+                <div style={label}>Entropy request</div>
+                <div style={value}>{data.entropyRequestId}</div>
+              </div>
+
+              <div style={row}>
+                <div style={label}>Selected provider</div>
+                <div style={value}>{isZeroAddr(data.selectedProvider) ? "—" : short(data.selectedProvider)}</div>
               </div>
 
               <div style={{ fontSize: 12, opacity: 0.9, color: ink, lineHeight: 1.35 }}>
@@ -799,7 +812,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           <div style={panel}>
             <div style={{ fontWeight: 1000, color: inkStrong }}>Join</div>
 
-            {raffleNotJoinableReason && <div style={{ fontSize: 13, opacity: 0.92, color: inkStrong }}>{raffleNotJoinableReason}</div>}
+            {raffleNotJoinableReason && (
+              <div style={{ fontSize: 13, opacity: 0.92, color: inkStrong }}>{raffleNotJoinableReason}</div>
+            )}
 
             <div style={row}>
               <div style={label}>Total cost</div>
@@ -863,7 +878,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
               {isPending ? "Confirming…" : isConnected ? "Buy tickets" : "Sign in to join"}
             </button>
 
-            {!hasEnoughBalance && <div style={{ fontSize: 13, opacity: 0.95, color: inkStrong }}>Not enough USDC for this purchase.</div>}
+            {!hasEnoughBalance && (
+              <div style={{ fontSize: 13, opacity: 0.95, color: inkStrong }}>Not enough USDC for this purchase.</div>
+            )}
 
             <div style={{ fontSize: 12, opacity: 0.9, color: ink }}>
               Nothing happens automatically. You always confirm actions yourself.
@@ -873,7 +890,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           </div>
         </div>
 
-        {/* Winner panel (only after settled) */}
+        {/* Winner panel */}
         <div style={section}>
           <div style={panel}>
             <div style={{ fontWeight: 1000, color: inkStrong }}>Winner</div>
@@ -894,7 +911,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
                 </div>
               </>
             ) : (
-              <div style={{ fontSize: 13, opacity: 0.9, color: ink }}>The winner is shown only after the raffle is settled.</div>
+              <div style={{ fontSize: 13, opacity: 0.9, color: ink }}>
+                The winner is shown only after the raffle is settled.
+              </div>
             )}
           </div>
         </div>
@@ -914,7 +933,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
             )}
           </div>
 
-          {/* sparkle icon (same vibe) */}
+          {/* sparkle icon */}
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d="M12 2l1.2 4.5L18 8l-4.8 1.5L12 14l-1.2-4.5L6 8l4.8-1.5L12 2Z"
