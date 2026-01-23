@@ -25,7 +25,6 @@ function short(a: string) {
 }
 
 type DurationUnit = "minutes" | "hours" | "days";
-
 function unitToSeconds(unit: DurationUnit): number {
   if (unit === "minutes") return 60;
   if (unit === "hours") return 3600;
@@ -35,7 +34,6 @@ function unitToSeconds(unit: DurationUnit): number {
 function sanitizeIntInput(raw: string) {
   return raw.replace(/[^\d]/g, "");
 }
-
 function toIntStrict(raw: string, fallback = 0) {
   const s = sanitizeIntInput(raw);
   if (!s) return fallback;
@@ -85,9 +83,13 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   const [createdRaffleId, setCreatedRaffleId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // --- Allowance/balance state ---
   const [usdcBal, setUsdcBal] = useState<bigint | null>(null);
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [allowLoading, setAllowLoading] = useState(false);
+
+  // Optional: hide confusing numbers behind a “Details” toggle
+  const [showDetails, setShowDetails] = useState(false);
 
   const deployer = useMemo(
     () =>
@@ -155,8 +157,8 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   const durationHint = useMemo(() => {
     if (!durV) return "Choose a duration.";
-    if (durationSecondsN < MIN_DURATION_SECONDS) return "Minimum duration is 5 minutes.";
-    if (durationSecondsN > MAX_DURATION_SECONDS) return "Maximum duration is 30 days.";
+    if (durationSecondsN < MIN_DURATION_SECONDS) return "Minimum is 5 minutes.";
+    if (durationSecondsN > MAX_DURATION_SECONDS) return "Maximum is 30 days.";
     const end = new Date(Date.now() + durationSecondsN * 1000);
     return `Ends at: ${end.toLocaleString()}`;
   }, [durV, durationSecondsN]);
@@ -209,6 +211,8 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     setMsg(null);
     setCreatedRaffleId(null);
     setCopied(false);
+    setShowDetails(false);
+    setAdvancedOpen(false);
   }, [open]);
 
   useEffect(() => {
@@ -220,12 +224,12 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   async function onEnablePrizeDeposit() {
     setMsg(null);
-
     if (!me) return setMsg("Please sign in first.");
     if (!usdcContract) return setMsg("USDC contract not available right now.");
     if (requiredAllowanceU <= 0n) return setMsg("Enter a winning pot first.");
 
     try {
+      // Approve exactly the pot amount (simple + least confusing)
       const tx = prepareContractCall({
         contract: usdcContract,
         method: "function approve(address spender,uint256 amount) returns (bool)",
@@ -234,11 +238,11 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
       await sendAndConfirm(tx);
       await refreshAllowance();
-      setMsg("Nice — deposit enabled. Now you can launch your raffle.");
+      setMsg("✅ Prize deposit is ready. You can launch your raffle.");
     } catch (e: any) {
       const m = String(e?.reason || e?.shortMessage || e?.message || "");
       if (m.toLowerCase().includes("rejected")) setMsg("Action canceled.");
-      else setMsg("Could not enable the deposit right now. Please try again.");
+      else setMsg("Could not set permission right now. Please try again.");
     }
   }
 
@@ -280,7 +284,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     if (!minPurchaseOk) return setMsg("Min purchase must be ≤ max tickets (or keep max unlimited).");
     if (requiredAllowanceU <= 0n) return setMsg("Winning pot must be greater than 0.");
     if (!hasEnoughBalance) return setMsg("Not enough USDC for the winning pot deposit.");
-    if (!hasEnoughAllowance) return setMsg("First enable the prize deposit (Step 1).");
+    if (!hasEnoughAllowance) return setMsg("Step 1 is required: set prize deposit permission.");
 
     try {
       const durationSeconds = BigInt(durationSecondsN);
@@ -297,9 +301,9 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
       const created = extractCreatedRaffleAddress(res);
       if (created) {
         setCreatedRaffleId(created);
-        setMsg("Raffle created 🎉 Share it with your friends!");
+        setMsg("🎉 Your raffle is live! Share it with your friends.");
       } else {
-        setMsg("Raffle created 🎉 (Couldn’t auto-detect the address from the receipt.)");
+        setMsg("🎉 Your raffle is live! (Couldn’t auto-detect the address.)");
       }
 
       try {
@@ -324,12 +328,10 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     }
   }
 
-  // ----------------- LIVE PREVIEW OBJECT -----------------
   const previewRaffle: RaffleListItem = useMemo(() => {
     const now = Math.floor(Date.now() / 1000);
     const deadline = durOk ? String(now + durationSecondsN) : String(now + 3600);
 
-    // Use entered USDC values converted to 6 decimals, like your real data.
     const tp = sanitizeIntInput(ticketPrice || "0") || "0";
     const wp = sanitizeIntInput(winningPot || "0") || "0";
 
@@ -383,7 +385,9 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   if (!open) return null;
 
-  // ----------------- STYLES (prettier + two column + sticky preview) -----------------
+  const isNarrow = typeof window !== "undefined" ? window.innerWidth < 900 : false;
+
+  // --------- CLEAN WHITE UI STYLES ----------
   const overlay: React.CSSProperties = {
     position: "fixed",
     inset: 0,
@@ -396,119 +400,124 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
   };
 
   const modal: React.CSSProperties = {
-    width: "min(980px, 100%)",
+    width: "min(1020px, 100%)",
     maxHeight: "calc(100vh - 32px)",
-    borderRadius: 24,
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: "rgba(255,255,255,0.10)",
-    backdropFilter: "blur(18px)",
-    WebkitBackdropFilter: "blur(18px)",
-    boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+    background: "#FFFFFF",
+    color: "#0F172A",
+    borderRadius: 20,
+    border: "1px solid rgba(15, 23, 42, 0.08)",
+    boxShadow: "0 30px 80px rgba(0,0,0,0.35)",
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
   };
 
   const header: React.CSSProperties = {
-    padding: "16px 16px 12px 16px",
+    padding: "16px 18px",
+    borderBottom: "1px solid rgba(15, 23, 42, 0.08)",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 12,
-    borderBottom: "1px solid rgba(255,255,255,0.14)",
+    gap: 14,
   };
 
-  const badge: React.CSSProperties = {
+  const title: React.CSSProperties = {
+    fontSize: 20,
+    fontWeight: 1000,
+    letterSpacing: -0.2,
+    margin: 0,
+  };
+
+  const subtitle: React.CSSProperties = {
+    marginTop: 6,
+    fontSize: 13,
+    color: "rgba(15, 23, 42, 0.70)",
+    lineHeight: 1.35,
+  };
+
+  const tag: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
     gap: 8,
     borderRadius: 999,
     padding: "6px 10px",
-    border: "1px solid rgba(255,255,255,0.22)",
-    background: "rgba(255,255,255,0.08)",
+    background: "rgba(2, 6, 23, 0.04)",
+    border: "1px solid rgba(2, 6, 23, 0.08)",
     fontSize: 12,
     fontWeight: 900,
+    color: "rgba(15, 23, 42, 0.80)",
+    width: "fit-content",
   };
 
   const closeBtn: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.22)",
-    background: "rgba(255,255,255,0.08)",
-    borderRadius: 14,
+    borderRadius: 12,
+    border: "1px solid rgba(15, 23, 42, 0.10)",
+    background: "rgba(15, 23, 42, 0.04)",
     padding: "10px 12px",
     cursor: "pointer",
     fontWeight: 900,
+    color: "#0F172A",
     whiteSpace: "nowrap",
   };
 
   const body: React.CSSProperties = {
-    padding: 16,
+    padding: 18,
     overflowY: "auto",
   };
 
-  const layout: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "1.15fr 0.85fr",
-    gap: 14,
-  };
+  const layout: React.CSSProperties = isNarrow
+    ? { display: "grid", gridTemplateColumns: "1fr", gap: 14 }
+    : { display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 14 };
 
-  const leftCol: React.CSSProperties = {
-    minWidth: 0,
-  };
-
-  const rightCol: React.CSSProperties = {
-    minWidth: 0,
-    position: "sticky",
-    top: 12,
-    alignSelf: "start",
-  };
-
-  const section: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.16)",
-    background: "rgba(255,255,255,0.08)",
-    borderRadius: 18,
+  const panel: React.CSSProperties = {
+    borderRadius: 16,
+    border: "1px solid rgba(15, 23, 42, 0.08)",
+    background: "rgba(15, 23, 42, 0.02)",
     padding: 14,
-    marginTop: 12,
   };
 
-  const sectionTitle: React.CSSProperties = {
-    fontWeight: 1000,
+  const panelTitleRow: React.CSSProperties = {
     display: "flex",
     justifyContent: "space-between",
-    gap: 10,
-    alignItems: "center",
+    alignItems: "baseline",
+    gap: 12,
   };
 
-  const pill: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: "rgba(255,255,255,0.06)",
-    borderRadius: 999,
-    padding: "6px 10px",
-    fontWeight: 900,
+  const panelTitle: React.CSSProperties = {
+    margin: 0,
+    fontSize: 14,
+    fontWeight: 1000,
+    letterSpacing: -0.1,
+  };
+
+  const panelHint: React.CSSProperties = {
+    marginTop: 8,
     fontSize: 12,
-    opacity: 0.92,
+    color: "rgba(15, 23, 42, 0.65)",
+  };
+
+  const label: React.CSSProperties = {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: 900,
+    color: "rgba(15, 23, 42, 0.80)",
   };
 
   const input: React.CSSProperties = {
+    marginTop: 8,
     width: "100%",
-    border: "1px solid rgba(255,255,255,0.20)",
-    background: "rgba(255,255,255,0.06)",
-    borderRadius: 14,
-    padding: "12px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(15, 23, 42, 0.12)",
+    background: "#FFFFFF",
+    padding: "11px 12px",
     outline: "none",
     fontWeight: 850,
+    color: "#0F172A",
   };
 
-  const labelRow: React.CSSProperties = {
-    marginTop: 12,
-    fontSize: 13,
-    opacity: 0.9,
-    fontWeight: 950,
-  };
-
-  const hint: React.CSSProperties = {
-    marginTop: 8,
-    fontSize: 12,
-    opacity: 0.75,
+  const select: React.CSSProperties = {
+    ...input,
+    cursor: "pointer",
   };
 
   const grid2: React.CSSProperties = {
@@ -518,76 +527,80 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     marginTop: 10,
   };
 
+  const grid3: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "1.2fr 1fr 1fr",
+    gap: 10,
+    marginTop: 10,
+  };
+
+  const steps: React.CSSProperties = {
+    marginTop: 12,
+    display: "grid",
+    gap: 10,
+  };
+
   const btnBase: React.CSSProperties = {
     width: "100%",
-    marginTop: 12,
-    borderRadius: 16,
+    borderRadius: 14,
     padding: "12px 14px",
     fontWeight: 1000,
-    letterSpacing: 0.2,
-    border: "1px solid rgba(255,255,255,0.22)",
+    border: "1px solid rgba(15, 23, 42, 0.12)",
   };
 
   const btnPrimary: React.CSSProperties = {
     ...btnBase,
     cursor: "pointer",
-    background: "rgba(255,255,255,0.22)",
+    background: "#0F172A",
+    color: "#FFFFFF",
+    border: "1px solid rgba(15, 23, 42, 0.12)",
   };
 
   const btnSoft: React.CSSProperties = {
     ...btnBase,
     cursor: "pointer",
-    background: "rgba(255,255,255,0.08)",
+    background: "rgba(15, 23, 42, 0.05)",
+    color: "#0F172A",
   };
 
   const btnDisabled: React.CSSProperties = {
     ...btnBase,
     cursor: "not-allowed",
-    opacity: 0.6,
-    background: "rgba(255,255,255,0.04)",
+    opacity: 0.55,
+    background: "rgba(15, 23, 42, 0.04)",
+    color: "rgba(15, 23, 42, 0.70)",
   };
 
-  const infoRow: React.CSSProperties = {
+  const statusRow: React.CSSProperties = {
+    marginTop: 12,
     display: "flex",
     gap: 10,
     flexWrap: "wrap",
-    marginTop: 12,
   };
 
-  const previewShell: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.16)",
-    background: "rgba(255,255,255,0.06)",
-    borderRadius: 18,
-    padding: 12,
+  const statusChip: React.CSSProperties = {
+    borderRadius: 999,
+    padding: "6px 10px",
+    border: "1px solid rgba(15, 23, 42, 0.10)",
+    background: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: 900,
+    color: "rgba(15, 23, 42, 0.78)",
   };
 
-  // Responsive: stack on small screens
-  const mobileStack: React.CSSProperties = {
-    display: "none",
-  };
-
-  // We can’t do media queries inline, so keep it simple:
-  // This still looks good on mobile because the modal width shrinks,
-  // and the grid naturally stacks poorly; if you want perfect mobile,
-  // we should move these styles to CSS.
-  // For now: allow wrapping by using a single column when screen is narrow
-  const isNarrow = typeof window !== "undefined" ? window.innerWidth < 860 : false;
-  const layoutStyle = isNarrow ? { ...layout, gridTemplateColumns: "1fr" } : layout;
+  const previewWrap: React.CSSProperties = isNarrow
+    ? {}
+    : { position: "sticky", top: 12, alignSelf: "start" };
 
   return (
     <div style={overlay} onMouseDown={onClose}>
       <div style={modal} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div style={header}>
           <div style={{ display: "grid", gap: 6 }}>
-            <div style={badge}>
-              <span>Create</span>
-              <span style={{ opacity: 0.65 }}>•</span>
-              <span>{ETHERLINK_MAINNET.chainName}</span>
-            </div>
-
-            <div style={{ fontSize: 22, fontWeight: 1100 }}>Create a raffle</div>
-            <div style={{ fontSize: 13, opacity: 0.78 }}>
-              Live preview on the right — you’ll confirm every step in your wallet.
+            <div style={tag}>Network: {ETHERLINK_MAINNET.chainName}</div>
+            <h2 style={title}>Create a raffle</h2>
+            <div style={subtitle}>
+              Two quick steps. You’ll confirm everything in your wallet.
             </div>
           </div>
 
@@ -597,92 +610,92 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
         </div>
 
         <div style={body}>
-          <div style={layoutStyle}>
-            {/* LEFT: form */}
-            <div style={leftCol}>
-              {/* Settings */}
-              <div style={section}>
-                <div style={sectionTitle}>
-                  <span>Live settings</span>
-                  <span style={pill}>{loading ? "Loading…" : data ? "Synced" : "Unavailable"}</span>
+          <div style={layout}>
+            {/* LEFT */}
+            <div style={{ minWidth: 0, display: "grid", gap: 12 }}>
+              {/* Network settings */}
+              <div style={panel}>
+                <div style={panelTitleRow}>
+                  <h3 style={panelTitle}>Network settings</h3>
+                  <span style={statusChip}>{loading ? "Loading…" : data ? "Up to date" : "Unavailable"}</span>
                 </div>
 
-                {note && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>{note}</div>}
+                {note && <div style={{ marginTop: 10, fontSize: 13, color: "rgba(15, 23, 42, 0.75)" }}>{note}</div>}
 
-                <div style={{ marginTop: 12, display: "grid", gap: 8, fontSize: 13, opacity: 0.92 }}>
+                <div style={{ marginTop: 10, display: "grid", gap: 8, fontSize: 13, color: "rgba(15, 23, 42, 0.78)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <span style={{ opacity: 0.75 }}>Ppopgi fee</span>
-                    <b>{data ? `${data.protocolFeePercent}%` : "—"}</b>
+                    <span>Ppopgi fee</span>
+                    <b style={{ color: "#0F172A" }}>{data ? `${data.protocolFeePercent}%` : "—"}</b>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <span style={{ opacity: 0.75 }}>Fee receiver</span>
-                    <b>{data ? short(data.feeRecipient) : "—"}</b>
+                    <span>Fee receiver</span>
+                    <b style={{ color: "#0F172A" }}>{data ? short(data.feeRecipient) : "—"}</b>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <span style={{ opacity: 0.75 }}>USDC</span>
-                    <b>{data ? short(data.usdc) : "—"}</b>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <span style={{ opacity: 0.75 }}>Randomness provider</span>
-                    <b>{data ? short(data.entropyProvider) : "—"}</b>
+                    <span>USDC contract</span>
+                    <b style={{ color: "#0F172A" }}>{data ? short(data.usdc) : "—"}</b>
                   </div>
                 </div>
 
-                <div style={hint}>These are read from the network and can’t be changed by the app.</div>
+                <div style={panelHint}>These come from the blockchain and can’t be changed by the app.</div>
               </div>
 
               {/* Details */}
-              <div style={section}>
-                <div style={sectionTitle}>
-                  <span>Raffle details</span>
-                  <span style={pill}>{advancedOpen ? "Advanced" : "Simple"}</span>
+              <div style={panel}>
+                <div style={panelTitleRow}>
+                  <h3 style={panelTitle}>Raffle details</h3>
+                  <button style={btnSoft} onClick={() => setShowDetails((v) => !v)} type="button">
+                    {showDetails ? "Hide details" : "Show details"}
+                  </button>
                 </div>
 
-                <div style={labelRow}>Name</div>
+                <div style={label}>Name</div>
                 <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ppopgi #12" />
 
-                <div style={grid2}>
+                <div style={grid3}>
                   <div>
-                    <div style={labelRow}>Ticket price (USDC)</div>
+                    <div style={label}>Ticket price (USDC)</div>
                     <input
                       style={input}
                       value={ticketPrice}
                       onChange={(e) => setTicketPrice(sanitizeIntInput(e.target.value))}
                       inputMode="numeric"
-                      placeholder="e.g. 1"
+                      placeholder="1"
                     />
-                    <div style={hint}>Whole numbers only (no decimals).</div>
+                    <div style={panelHint}>Whole numbers only.</div>
                   </div>
 
                   <div>
-                    <div style={labelRow}>Winning pot (USDC)</div>
+                    <div style={label}>Winning pot (USDC)</div>
                     <input
                       style={input}
                       value={winningPot}
                       onChange={(e) => setWinningPot(sanitizeIntInput(e.target.value))}
                       inputMode="numeric"
-                      placeholder="e.g. 100"
+                      placeholder="100"
                     />
-                    <div style={hint}>This is deposited when you launch.</div>
+                    <div style={panelHint}>Deposited when launching.</div>
+                  </div>
+
+                  <div>
+                    <div style={label}>Duration</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+                      <input
+                        style={input}
+                        value={durationValue}
+                        onChange={(e) => setDurationValue(sanitizeIntInput(e.target.value))}
+                        inputMode="numeric"
+                        placeholder="24"
+                      />
+                      <select style={select} value={durationUnit} onChange={(e) => setDurationUnit(e.target.value as any)}>
+                        <option value="minutes">min</option>
+                        <option value="hours">hours</option>
+                        <option value="days">days</option>
+                      </select>
+                    </div>
+                    <div style={panelHint}>{durationHint}</div>
                   </div>
                 </div>
-
-                <div style={labelRow}>Duration</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-                  <input
-                    style={input}
-                    value={durationValue}
-                    onChange={(e) => setDurationValue(sanitizeIntInput(e.target.value))}
-                    inputMode="numeric"
-                    placeholder="e.g. 24"
-                  />
-                  <select style={input} value={durationUnit} onChange={(e) => setDurationUnit(e.target.value as any)}>
-                    <option value="minutes">minutes</option>
-                    <option value="hours">hours</option>
-                    <option value="days">days</option>
-                  </select>
-                </div>
-                <div style={hint}>{durationHint}</div>
 
                 <button style={btnSoft} onClick={() => setAdvancedOpen((v) => !v)} type="button">
                   {advancedOpen ? "Hide advanced options" : "Show advanced options"}
@@ -692,7 +705,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                   <div style={{ marginTop: 10 }}>
                     <div style={grid2}>
                       <div>
-                        <div style={labelRow}>Min tickets</div>
+                        <div style={label}>Min tickets</div>
                         <input
                           style={input}
                           value={minTickets}
@@ -702,7 +715,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                         />
                       </div>
                       <div>
-                        <div style={labelRow}>Max tickets</div>
+                        <div style={label}>Max tickets</div>
                         <input
                           style={input}
                           value={maxTickets}
@@ -710,12 +723,12 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                           inputMode="numeric"
                           placeholder="Unlimited"
                         />
-                        <div style={hint}>{maxTickets.trim() === "" ? "Unlimited" : `Cap: ${maxTickets}`}</div>
+                        <div style={panelHint}>{maxTickets.trim() === "" ? "Unlimited" : `Cap: ${maxTickets}`}</div>
                       </div>
                     </div>
 
                     <div>
-                      <div style={labelRow}>Min purchase (tickets)</div>
+                      <div style={label}>Min purchase (tickets)</div>
                       <input
                         style={input}
                         value={minPurchaseAmount}
@@ -727,105 +740,98 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                   </div>
                 )}
 
-                {/* Allowance / balance */}
-                {me && (
-                  <div style={infoRow}>
-                    <span style={pill}>
-                      {allowLoading ? "Checking…" : usdcBal !== null ? `Wallet: ${fmtUsdc(usdcBal)} USDC` : "Wallet: —"}
+                {/* Simple status (no confusing approval amounts) */}
+                <div style={statusRow}>
+                  <span style={statusChip}>
+                    Prize deposit permission:{" "}
+                    {me ? (allowLoading ? "Checking…" : hasEnoughAllowance ? "✅ Ready" : "❌ Needed") : "Sign in"}
+                  </span>
+                  {showDetails && me && (
+                    <span style={statusChip}>
+                      Wallet: {allowLoading ? "…" : usdcBal !== null ? `${fmtUsdc(usdcBal)} USDC` : "—"}
                     </span>
-                    <span style={pill}>
-                      {allowance !== null ? `Approved: ${fmtUsdc(allowance)} USDC` : "Approved: —"}
+                  )}
+                  {showDetails && me && (
+                    <span style={statusChip}>
+                      Required: {fmtUsdc(requiredAllowanceU)} USDC
                     </span>
-                    <span style={pill}>
-                      Required: <b>{fmtUsdc(requiredAllowanceU)} USDC</b>
-                    </span>
-                  </div>
-                )}
+                  )}
+                </div>
 
-                {/* Steps */}
-                <button
-                  style={needsAllow ? btnSoft : btnDisabled}
-                  disabled={!needsAllow}
-                  onClick={onEnablePrizeDeposit}
-                  type="button"
-                >
-                  {isPending ? "Confirming…" : me ? "Step 1 — Enable prize deposit" : "Sign in to continue"}
-                </button>
+                <div style={steps}>
+                  <button
+                    style={needsAllow ? btnSoft : btnDisabled}
+                    disabled={!needsAllow}
+                    onClick={onEnablePrizeDeposit}
+                    type="button"
+                    title="This grants permission for the app to deposit the prize when creating."
+                  >
+                    {isPending ? "Confirming…" : me ? "Step 1 — Enable prize deposit" : "Sign in to continue"}
+                  </button>
 
-                <button style={canSubmit ? btnPrimary : btnDisabled} disabled={!canSubmit} onClick={onLaunchRaffle} type="button">
-                  {isPending ? "Creating…" : me ? "Step 2 — Launch raffle" : "Sign in to launch"}
-                </button>
+                  <button
+                    style={canSubmit ? btnPrimary : btnDisabled}
+                    disabled={!canSubmit}
+                    onClick={onLaunchRaffle}
+                    type="button"
+                  >
+                    {isPending ? "Creating…" : me ? "Step 2 — Launch raffle" : "Sign in to launch"}
+                  </button>
+                </div>
 
                 {!hasEnoughBalance && requiredAllowanceU > 0n && (
-                  <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+                  <div style={{ marginTop: 10, fontSize: 13, color: "rgba(15, 23, 42, 0.85)", fontWeight: 900 }}>
                     Not enough USDC for the winning pot deposit.
                   </div>
                 )}
 
                 {msg && (
-                  <div style={{ marginTop: 10, fontSize: 13, opacity: 0.92, fontWeight: 1000 }}>
+                  <div style={{ marginTop: 10, fontSize: 13, color: "#0F172A", fontWeight: 1000 }}>
                     {msg}
                   </div>
                 )}
 
                 {shareUrl && (
-                  <div style={{ marginTop: 12, ...previewShell }}>
+                  <div style={{ marginTop: 12, padding: 12, borderRadius: 14, border: "1px solid rgba(15, 23, 42, 0.10)", background: "#FFFFFF" }}>
                     <div style={{ fontWeight: 1000 }}>Share your raffle</div>
-                    <div style={{ marginTop: 6, fontSize: 13, opacity: 0.86 }}>Copy this link and send it to a friend:</div>
-
+                    <div style={{ marginTop: 6, fontSize: 13, color: "rgba(15, 23, 42, 0.70)" }}>
+                      Copy this link and send it to a friend:
+                    </div>
                     <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
                       <input style={input} value={shareUrl} readOnly />
                       <button style={btnPrimary} onClick={onCopyShareLink} type="button">
                         {copied ? "Copied!" : "Copy link"}
                       </button>
                     </div>
-
-                    <div style={{ marginTop: 10, fontSize: 12, opacity: 0.78 }}>
+                    <div style={{ marginTop: 10, fontSize: 12, color: "rgba(15, 23, 42, 0.65)" }}>
                       Raffle address: <b>{short(createdRaffleId)}</b>
                     </div>
                   </div>
                 )}
 
-                <div style={hint}>
-                  “Approved” can be higher than your wallet balance — it’s permission, not a payment.
-                </div>
+                {/* Only show this explanation when user asks for details */}
+                {showDetails && (
+                  <div style={panelHint}>
+                    “Permission” is not a payment. It can be higher than your wallet balance because it’s only an allowance.
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* RIGHT: live preview */}
-            <div style={isNarrow ? mobileStack : rightCol}>
-              <div style={previewShell}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-                  <div style={{ fontWeight: 1100 }}>Preview</div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>Updates as you type</div>
+            {/* RIGHT */}
+            <div style={{ minWidth: 0, ...previewWrap }}>
+              <div style={panel}>
+                <div style={panelTitleRow}>
+                  <h3 style={panelTitle}>Preview</h3>
+                  <span style={statusChip}>Updates as you type</span>
                 </div>
-
                 <div style={{ marginTop: 10 }}>
                   <RaffleCard raffle={previewRaffle as any} onOpen={() => {}} />
                 </div>
-
-                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                  This is a visual preview only. Final values come from your transaction + the network.
-                </div>
+                <div style={panelHint}>This is a visual preview only. Final values come from your transaction + the network.</div>
               </div>
             </div>
           </div>
-
-          {/* If narrow screen, show preview at bottom */}
-          {isNarrow && (
-            <div style={{ marginTop: 12 }}>
-              <div style={previewShell}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-                  <div style={{ fontWeight: 1100 }}>Preview</div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>Updates as you type</div>
-                </div>
-
-                <div style={{ marginTop: 10 }}>
-                  <RaffleCard raffle={previewRaffle as any} onOpen={() => {}} />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
