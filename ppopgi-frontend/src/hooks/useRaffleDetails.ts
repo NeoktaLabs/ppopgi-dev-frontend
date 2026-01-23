@@ -22,6 +22,8 @@ function statusFromUint8(n: number): RaffleStatus {
   return "UNKNOWN";
 }
 
+const ZERO = "0x0000000000000000000000000000000000000000";
+
 export type RaffleDetails = {
   address: string;
 
@@ -39,6 +41,14 @@ export type RaffleDetails = {
   deadline: string; // uint64 unix seconds
   paused: boolean;
 
+  // ✅ V2: enforce minimum purchase in UI
+  minPurchaseAmount: string; // uint32 raw
+
+  // ✅ V2: optional but useful for DRAWING diagnostics
+  finalizeRequestId: string; // uint64 raw (0 if none / unknown)
+  callbackGasLimit: string; // uint32 raw
+
+  // token + parties
   usdcToken: string;
   creator: string;
 
@@ -48,6 +58,8 @@ export type RaffleDetails = {
   feeRecipient: string;
   protocolFeePercent: string;
 
+  // entropy
+  entropy: string;
   entropyProvider: string;
   entropyRequestId: string;
   selectedProvider: string;
@@ -186,21 +198,21 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           contract,
           "usdcToken",
           ["function usdcToken() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
+          ZERO
         );
 
         const creator = await readFirstOr(
           contract,
           "creator",
           ["function creator() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
+          ZERO
         );
 
         const winner = await readFirstOr(
           contract,
           "winner",
           ["function winner() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
+          ZERO
         );
 
         const winningTicketIndex = await readFirstOr(
@@ -214,7 +226,7 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           contract,
           "feeRecipient",
           ["function feeRecipient() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
+          ZERO
         );
 
         const protocolFeePercent = await readFirstOr(
@@ -231,11 +243,44 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           0n
         );
 
+        // ✅ V2 additions
+        const minPurchaseAmount = await readFirstOr(
+          contract,
+          "minPurchaseAmount",
+          ["function minPurchaseAmount() view returns (uint32)"],
+          1
+        );
+
+        const finalizeRequestId = await readFirstOr(
+          contract,
+          "finalizeRequestId",
+          [
+            // try common spellings; keep resilient
+            "function finalizeRequestId() view returns (uint64)",
+            "function entropyRequestId() view returns (uint64)", // fallback if contract reuses the same id
+          ],
+          0
+        );
+
+        const callbackGasLimit = await readFirstOr(
+          contract,
+          "callbackGasLimit",
+          ["function callbackGasLimit() view returns (uint32)"],
+          0
+        );
+
+        const entropy = await readFirstOr(
+          contract,
+          "entropy",
+          ["function entropy() view returns (address)"],
+          ZERO
+        );
+
         const entropyProvider = await readFirstOr(
           contract,
           "entropyProvider",
           ["function entropyProvider() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
+          ZERO
         );
 
         const entropyRequestId = await readFirstOr(
@@ -249,7 +294,7 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           contract,
           "selectedProvider",
           ["function selectedProvider() view returns (address)"],
-          "0x0000000000000000000000000000000000000000"
+          ZERO
         );
 
         if (!alive) return;
@@ -270,6 +315,10 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           deadline: String(deadline),
           paused: Boolean(paused),
 
+          minPurchaseAmount: String(minPurchaseAmount),
+          finalizeRequestId: String(finalizeRequestId),
+          callbackGasLimit: String(callbackGasLimit),
+
           usdcToken: String(usdcToken),
           creator: String(creator),
 
@@ -279,6 +328,7 @@ export function useRaffleDetails(raffleAddress: string | null, open: boolean) {
           feeRecipient: String(feeRecipient),
           protocolFeePercent: String(protocolFeePercent),
 
+          entropy: String(entropy),
           entropyProvider: String(entropyProvider),
           entropyRequestId: String(entropyRequestId),
           selectedProvider: String(selectedProvider),
