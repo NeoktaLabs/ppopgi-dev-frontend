@@ -21,9 +21,9 @@ function isHexAddress(a: string) {
 }
 
 // ✅ V2 deployer only (exclude everything else = V1)
-const V2_DEPLOYER = normAddr (ADDRESSES.SingleWinnerDeployer);
+const V2_DEPLOYER = norm (ADDRESSES.SingleWinnerDeployer);
 function isV2Raffle(r: RaffleListItem) {
-  return normAddr(String(r?.deployer || "")) === normAddr(V2_DEPLOYER);
+  return norm(String(r?.deployer || "")) === norm(V2_DEPLOYER);
 }
 
 export type ClaimableRaffleItem = {
@@ -73,7 +73,7 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
   const [refreshKey, setRefreshKey] = useState(0);
   const refetch = useCallback(() => setRefreshKey((x) => x + 1), []);
 
-  const me = useMemo(() => (userAddress ? normAddr(userAddress) : null), [userAddress]);
+  const me = useMemo(() => (userAddress ? norm(userAddress) : null), [userAddress]);
 
   useEffect(() => {
     let alive = true;
@@ -148,11 +148,11 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
       const byId = new Map<string, { raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>();
 
       for (const r of created) {
-        byId.set(normAddr(r.id), { raffle: r, roles: { created: true, participated: false } });
+        byId.set(norm(r.id), { raffle: r, roles: { created: true, participated: false } });
       }
 
       for (const r of participated) {
-        const key = normAddr(r.id);
+        const key = norm(r.id);
         const prev = byId.get(key);
         if (prev) prev.roles.participated = true;
         else byId.set(key, { raffle: r, roles: { created: false, participated: true } });
@@ -236,7 +236,7 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
             const claimableUsdc = rFunds.ok ? BigInt(rFunds.value as any) : 0n;
             const claimableNative = rNative.ok ? BigInt(rNative.value as any) : 0n;
 
-            const creatorAddr = rCreator.ok ? normAddr(String(rCreator.value)) : "0x0";
+            const creatorAddr = rCreator.ok ? norm(String(rCreator.value)) : "0x0";
             const isCreator = creatorAddr === me;
 
             const item: ClaimableRaffleItem = {
