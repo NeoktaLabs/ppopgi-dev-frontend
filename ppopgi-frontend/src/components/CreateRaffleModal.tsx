@@ -320,7 +320,6 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
       if (m.toLowerCase().includes("rejected")) {
         setMsg("Transaction canceled.");
       } else {
-        // show the real error if we have it
         setMsg(m || "Could not create the raffle. Please try again.");
       }
     }
@@ -328,10 +327,11 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
   if (!open) return null;
 
+  // ----------------- STYLE (card / raffle vibes) -----------------
   const overlay: React.CSSProperties = {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.35)",
+    background: "rgba(0,0,0,0.45)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -339,24 +339,77 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     zIndex: 10500,
   };
 
-  const card: React.CSSProperties = {
-    width: "min(640px, 100%)",
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.35)",
-    background: "rgba(255,255,255,0.22)",
-    backdropFilter: "blur(14px)",
-    WebkitBackdropFilter: "blur(14px)",
-    boxShadow: "0 12px 40px rgba(0,0,0,0.18)",
-    padding: 18,
-    color: "#2B2B33",
+  const modal: React.CSSProperties = {
+    width: "min(720px, 100%)",
+    borderRadius: 22,
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(255,255,255,0.14)",
+    backdropFilter: "blur(18px)",
+    WebkitBackdropFilter: "blur(18px)",
+    boxShadow: "0 18px 60px rgba(0,0,0,0.28)",
+    padding: 16,
+    color: "rgba(20,20,28,0.92)",
+  };
+
+  const header: React.CSSProperties = {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "8px 8px 12px 8px",
+  };
+
+  const badge: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    padding: "6px 10px",
+    border: "1px solid rgba(255,255,255,0.25)",
+    background: "rgba(255,255,255,0.10)",
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: 0.2,
+  };
+
+  const closeBtn: React.CSSProperties = {
+    border: "1px solid rgba(255,255,255,0.24)",
+    background: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    padding: "10px 12px",
+    cursor: "pointer",
+    fontWeight: 900,
+    color: "rgba(20,20,28,0.88)",
   };
 
   const section: React.CSSProperties = {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.35)",
-    background: "rgba(255,255,255,0.18)",
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.10)",
+  };
+
+  const sectionTitle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    fontWeight: 900,
+    letterSpacing: 0.2,
+  };
+
+  const pill: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    padding: "6px 10px",
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(255,255,255,0.08)",
+    fontSize: 12,
+    fontWeight: 800,
+    opacity: 0.95,
   };
 
   const row: React.CSSProperties = {
@@ -365,19 +418,20 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     gap: 12,
     fontSize: 13,
     lineHeight: 1.35,
-    marginTop: 6,
+    marginTop: 8,
   };
 
-  const label: React.CSSProperties = { opacity: 0.85 };
+  const label: React.CSSProperties = { opacity: 0.72 };
 
   const input: React.CSSProperties = {
     width: "100%",
-    border: "1px solid rgba(255,255,255,0.55)",
-    background: "rgba(255,255,255,0.35)",
-    borderRadius: 12,
-    padding: "10px 10px",
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    padding: "12px 12px",
     outline: "none",
-    color: "#2B2B33",
+    color: "rgba(20,20,28,0.92)",
+    fontWeight: 700,
   };
 
   const selectStyle: React.CSSProperties = {
@@ -392,20 +446,11 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     marginTop: 10,
   };
 
-  const btnBase: React.CSSProperties = {
-    width: "100%",
-    marginTop: 12,
-    border: "1px solid rgba(255,255,255,0.45)",
-    background: "rgba(255,255,255,0.24)",
-    borderRadius: 14,
-    padding: "12px 12px",
-    color: "#2B2B33",
-    fontWeight: 800,
-    textAlign: "center",
+  const hint: React.CSSProperties = {
+    marginTop: 8,
+    fontSize: 12,
+    opacity: 0.78,
   };
-
-  const btnEnabled: React.CSSProperties = { ...btnBase, cursor: "pointer", opacity: 1 };
-  const btnDisabled: React.CSSProperties = { ...btnBase, cursor: "not-allowed", opacity: 0.6 };
 
   const help: React.CSSProperties = {
     display: "inline-flex",
@@ -414,89 +459,143 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     width: 18,
     height: 18,
     borderRadius: 999,
-    border: "1px solid rgba(0,0,0,0.18)",
-    background: "rgba(255,255,255,0.55)",
+    border: "1px solid rgba(255,255,255,0.25)",
+    background: "rgba(255,255,255,0.10)",
     fontSize: 12,
     fontWeight: 900,
-    marginLeft: 6,
+    marginLeft: 8,
     cursor: "help",
     userSelect: "none",
+    opacity: 0.9,
   };
 
   const labelRow = (text: string, tip: string) => (
-    <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85, display: "flex", alignItems: "center" }}>
-      <span>{text}</span>
+    <div style={{ marginTop: 12, fontSize: 13, opacity: 0.86, display: "flex", alignItems: "center" }}>
+      <span style={{ fontWeight: 900 }}>{text}</span>
       <span style={help} title={tip} aria-label={tip}>
         ?
       </span>
     </div>
   );
 
+  const btnBase: React.CSSProperties = {
+    width: "100%",
+    marginTop: 12,
+    borderRadius: 16,
+    padding: "12px 14px",
+    fontWeight: 950,
+    letterSpacing: 0.2,
+    textAlign: "center",
+    transition: "transform 120ms ease, opacity 120ms ease",
+  };
+
+  const btnSecondaryEnabled: React.CSSProperties = {
+    ...btnBase,
+    cursor: "pointer",
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(255,255,255,0.10)",
+    color: "rgba(20,20,28,0.92)",
+    opacity: 1,
+  };
+
+  const btnPrimaryEnabled: React.CSSProperties = {
+    ...btnBase,
+    cursor: "pointer",
+    border: "1px solid rgba(255,255,255,0.30)",
+    background: "rgba(255,255,255,0.22)",
+    color: "rgba(20,20,28,0.92)",
+    opacity: 1,
+  };
+
+  const btnDisabled: React.CSSProperties = {
+    ...btnBase,
+    cursor: "not-allowed",
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.06)",
+    color: "rgba(20,20,28,0.72)",
+    opacity: 0.65,
+  };
+
+  const divider: React.CSSProperties = {
+    height: 1,
+    marginTop: 12,
+    background: "rgba(255,255,255,0.14)",
+  };
+
+  // ----------------------------------------------------------------
+
   return (
     <div style={overlay} onMouseDown={onClose}>
-      <div style={card} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 12, opacity: 0.85 }}>Create</div>
-            <div style={{ fontSize: 18, fontWeight: 800 }}>Create a raffle</div>
+      <div style={modal} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        {/* Header */}
+        <div style={header}>
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={badge}>
+              <span style={{ opacity: 0.9 }}>Create</span>
+              <span style={{ opacity: 0.65 }}>•</span>
+              <span style={{ opacity: 0.9 }}>{ETHERLINK_MAINNET.chainName}</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 1000, letterSpacing: 0.2 }}>Create a raffle</div>
+            <div style={{ fontSize: 13, opacity: 0.78 }}>
+              You’ll confirm every action in your wallet. Nothing happens automatically.
+            </div>
           </div>
 
-          <button
-            onClick={onClose}
-            style={{
-              border: "1px solid rgba(255,255,255,0.5)",
-              background: "rgba(255,255,255,0.25)",
-              borderRadius: 12,
-              padding: "8px 10px",
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={onClose} style={closeBtn} aria-label="Close">
             Close
           </button>
         </div>
 
-        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-          This raffle booth runs on <b>{ETHERLINK_MAINNET.chainName}</b>.
-        </div>
-
         {/* Live factory config */}
         <div style={section}>
-          <div style={{ fontWeight: 800 }}>Create settings (live)</div>
+          <div style={sectionTitle}>
+            <span>Create settings (live)</span>
+            <span style={pill}>
+              {loading ? "Loading…" : data ? "Synced" : "Unavailable"}
+            </span>
+          </div>
 
-          {loading && <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>Loading create settings…</div>}
-          {note && <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>{note}</div>}
+          {note && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>{note}</div>}
+
+          <div style={divider} />
 
           <div style={row}>
             <div style={label}>Ppopgi fee</div>
-            <div style={{ fontWeight: 700 }}>{data ? `${data.protocolFeePercent}%` : "—"}</div>
+            <div style={{ fontWeight: 900 }}>{data ? `${data.protocolFeePercent}%` : "—"}</div>
           </div>
 
           <div style={row}>
             <div style={label}>Fee receiver</div>
-            <div style={{ fontWeight: 700 }}>{data ? short(data.feeRecipient) : "—"}</div>
+            <div style={{ fontWeight: 900 }}>{data ? short(data.feeRecipient) : "—"}</div>
           </div>
 
           <div style={row}>
             <div style={label}>USDC</div>
-            <div style={{ fontWeight: 700 }}>{data ? short(data.usdc) : "—"}</div>
+            <div style={{ fontWeight: 900 }}>{data ? short(data.usdc) : "—"}</div>
           </div>
 
           <div style={row}>
             <div style={label}>Randomness provider</div>
-            <div style={{ fontWeight: 700 }}>{data ? short(data.entropyProvider) : "—"}</div>
+            <div style={{ fontWeight: 900 }}>{data ? short(data.entropyProvider) : "—"}</div>
           </div>
 
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
-            These settings are set on the network and can’t be changed by the app.
-          </div>
+          <div style={hint}>These settings are read from the network and can’t be changed by the app.</div>
         </div>
 
         {/* Form */}
         <div style={section}>
-          <div style={{ fontWeight: 800 }}>Raffle details</div>
+          <div style={sectionTitle}>
+            <span>Raffle details</span>
+            <span style={pill}>{advancedOpen ? "Advanced on" : "Simple"}</span>
+          </div>
 
           {labelRow("Name", "Public name shown on the raffle card.")}
-          <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ppopgi #12" />
+          <input
+            style={input}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Ppopgi #12"
+          />
 
           <div style={grid2}>
             <div>
@@ -522,7 +621,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
           <div>
             {labelRow("Duration", "How long the raffle stays open. Min 5 minutes, max 30 days.")}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
               <input
                 style={input}
                 value={durationValue}
@@ -537,28 +636,30 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
               </select>
             </div>
 
-            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>{durationHint}</div>
+            <div style={hint}>{durationHint}</div>
           </div>
 
           {/* Advanced settings */}
           <div style={{ marginTop: 14 }}>
             <button
               style={{
-                border: "1px solid rgba(0,0,0,0.15)",
-                background: "rgba(255,255,255,0.65)",
-                borderRadius: 12,
-                padding: "8px 10px",
+                width: "100%",
+                border: "1px solid rgba(255,255,255,0.22)",
+                background: "rgba(255,255,255,0.08)",
+                borderRadius: 16,
+                padding: "12px 14px",
                 cursor: "pointer",
-                fontWeight: 800,
+                fontWeight: 950,
+                color: "rgba(20,20,28,0.92)",
               }}
               onClick={() => setAdvancedOpen((v) => !v)}
               type="button"
             >
-              {advancedOpen ? "Hide advanced settings" : "Advanced settings"}
+              {advancedOpen ? "Hide advanced settings" : "Show advanced settings"}
             </button>
 
             {advancedOpen && (
-              <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                 <div style={grid2}>
                   <div>
                     {labelRow("Min tickets", "Raffle only finalizes after at least this many tickets are sold.")}
@@ -580,9 +681,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                       inputMode="numeric"
                       placeholder="Unlimited"
                     />
-                    <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-                      {maxTickets.trim() === "" ? "Unlimited" : `Cap: ${maxTickets}`}
-                    </div>
+                    <div style={hint}>{maxTickets.trim() === "" ? "Unlimited" : `Cap: ${maxTickets}`}</div>
                   </div>
                 </div>
 
@@ -602,23 +701,19 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
           {/* Allowance helper */}
           {me && (
-            <div style={{ marginTop: 12, fontSize: 12, opacity: 0.85 }}>
-              {allowLoading ? (
-                "Checking USDC allowance…"
-              ) : (
-                <>
-                  {usdcBal !== null ? `Your USDC: ${fmtUsdc(usdcBal)} • ` : ""}
-                  {allowance !== null
-                    ? `Allowed for create: ${fmtUsdc(allowance)} USDC`
-                    : "Allowance unknown"}
-                </>
-              )}
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <span style={pill}>
+                {allowLoading ? "Checking allowance…" : usdcBal !== null ? `Your USDC: ${fmtUsdc(usdcBal)}` : "USDC: —"}
+              </span>
+              <span style={pill}>
+                {allowance !== null ? `Allowed: ${fmtUsdc(allowance)} USDC` : "Allowance: —"}
+              </span>
             </div>
           )}
 
-          {/* Allow step */}
+          {/* Buttons */}
           <button
-            style={needsAllow ? btnEnabled : btnDisabled}
+            style={needsAllow ? btnSecondaryEnabled : btnDisabled}
             disabled={!needsAllow}
             onClick={onAllowUsdc}
             title="Allow USDC so the deployer can deposit the winning pot"
@@ -626,8 +721,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
             {isPending ? "Confirming…" : me ? "Allow USDC" : "Sign in to allow"}
           </button>
 
-          {/* Create */}
-          <button style={canSubmit ? btnEnabled : btnDisabled} disabled={!canSubmit} onClick={onCreate}>
+          <button style={canSubmit ? btnPrimaryEnabled : btnDisabled} disabled={!canSubmit} onClick={onCreate}>
             {isPending ? "Creating…" : me ? "Create raffle" : "Sign in to create"}
           </button>
 
@@ -637,15 +731,13 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
             </div>
           )}
 
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
-            You will confirm actions in your wallet. Nothing happens automatically.
-          </div>
+          {msg && (
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.92, fontWeight: 800 }}>
+              {msg}
+            </div>
+          )}
 
-          {msg && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{msg}</div>}
-        </div>
-
-        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-          Nothing happens automatically. You always confirm actions yourself.
+          <div style={hint}>Nothing happens automatically. You always confirm actions yourself.</div>
         </div>
       </div>
     </div>
