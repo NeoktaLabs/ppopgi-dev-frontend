@@ -19,6 +19,12 @@ function isHexAddress(a: string) {
   return /^0x[0-9a-fA-F]{40}$/.test(a);
 }
 
+// ✅ V2 deployer only (exclude everything else = V1)
+const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
+function isV2Raffle(r: RaffleListItem) {
+  return normAddr(String(r?.deployer || "")) === normAddr(V2_DEPLOYER);
+}
+
 export type ClaimableRaffleItem = {
   raffle: RaffleListItem;
   roles: { created: boolean; participated: boolean };
@@ -33,7 +39,6 @@ export type ClaimableRaffleItem = {
 };
 
 type Mode = "indexer" | "empty";
-
 type Merged = Array<{ raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>;
 
 async function readWithFallback<T>(
@@ -92,6 +97,7 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
             feeRecipient
             deployer
             lastUpdatedTimestamp
+            creator
           }
 
           participated: raffleEvents(
@@ -130,9 +136,13 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
       const json = await res.json();
       if (json?.errors?.length) throw new Error("SUBGRAPH_GQL_ERROR");
 
-      const created = (json.data?.created ?? []) as RaffleListItem[];
+      // ✅ Pull then filter to V2-only immediately
+      const createdAll = (json.data?.created ?? []) as RaffleListItem[];
       const participatedEvents = (json.data?.participated ?? []) as Array<{ raffle: any }>;
-      const participated = participatedEvents.map((e) => e.raffle).filter(Boolean) as RaffleListItem[];
+      const participatedAll = participatedEvents.map((e) => e.raffle).filter(Boolean) as RaffleListItem[];
+
+      const created = createdAll.filter(isV2Raffle);
+      const participated = participatedAll.filter(isV2Raffle);
 
       const byId = new Map<string, { raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>();
 
@@ -161,11 +171,14 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
     async function enrichOnChain(merged: Merged): Promise<ClaimableRaffleItem[]> {
       if (!me) return [];
 
+      // ✅ extra safety: only enrich V2 (even if something weird slips through)
+      const mergedV2 = merged.filter((x) => isV2Raffle(x.raffle));
+
       const out: ClaimableRaffleItem[] = [];
       const batchSize = 10;
 
-      for (let i = 0; i < merged.length; i += batchSize) {
-        const slice = merged.slice(i, i + batchSize);
+      for (let i = 0; i < mergedV2.length; i += batchSize) {
+        const slice = mergedV2.slice(i, i + batchSize);
 
         const results = await Promise.all(
           slice.map(async ({ raffle, roles }) => {
@@ -189,7 +202,6 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
               address: addr,
             });
 
-            // claimableFunds(me)
             const rFunds = await readWithFallback<bigint>(
               {
                 contract: raffleContract,
@@ -200,7 +212,6 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
             );
             if (!rFunds.ok) errors.push(`claimableFunds: ${rFunds.error}`);
 
-            // claimableNative(me)
             const rNative = await readWithFallback<bigint>(
               {
                 contract: raffleContract,
@@ -211,7 +222,6 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
             );
             if (!rNative.ok) errors.push(`claimableNative: ${rNative.error}`);
 
-            // creator()
             const rCreator = await readWithFallback<string>(
               {
                 contract: raffleContract,
@@ -276,7 +286,6 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
 
         setItems(enriched);
 
-        // Optional: if lots of reads failed, hint it
         const failed = enriched.filter((x) => (x.readErrors?.length ?? 0) > 0).length;
         if (failed > 0) {
           setNote(`Some on-chain reads failed (${failed}). If a card shows “0” incorrectly, hit Refresh.`);
