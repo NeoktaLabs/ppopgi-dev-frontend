@@ -4,6 +4,7 @@ import type { RaffleListItem } from "../indexer/subgraph";
 import { getContract, readContract } from "thirdweb";
 import { thirdwebClient } from "../thirdweb/client";
 import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
+import { ADDRESSES } from "../config/contracts";
 
 function mustEnv(name: string): string {
   const v = (import.meta as any).env?.[name];
@@ -11,7 +12,7 @@ function mustEnv(name: string): string {
   return v;
 }
 
-function normAddr(a: string) {
+function norm(a: string) {
   return a.trim().toLowerCase();
 }
 
@@ -20,7 +21,7 @@ function isHexAddress(a: string) {
 }
 
 // ✅ V2 deployer only (exclude everything else = V1)
-const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
+const V2_DEPLOYER = normAddr (ADDRESSES.SingleWinnerDeployer);
 function isV2Raffle(r: RaffleListItem) {
   return normAddr(String(r?.deployer || "")) === normAddr(V2_DEPLOYER);
 }

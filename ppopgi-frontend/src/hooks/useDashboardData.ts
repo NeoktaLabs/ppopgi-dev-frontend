@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { fetchRafflesFromSubgraph } from "../indexer/subgraph";
+import { ADDRESSES } from "../config/contracts";
 
 type Result = {
   created: RaffleListItem[] | null;
@@ -14,7 +15,7 @@ function norm(a: string) {
 }
 
 // ✅ V2 deployer (exclude everything else = V1)
-const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
+const V2_DEPLOYER = norm (ADDRESSES.SingleWinnerDeployer);
 const V2_DEPLOYER_N = norm(V2_DEPLOYER);
 
 function isV2(r: RaffleListItem) {

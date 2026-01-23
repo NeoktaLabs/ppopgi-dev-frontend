@@ -3,17 +3,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { fetchRafflesFromSubgraph } from "../indexer/subgraph";
 import { fetchRafflesOnChainFallback } from "../onchain/fallbackRaffles";
+import { ADDRESSES } from "../config/contracts";
 
 type Mode = "indexer" | "live";
 
-// ✅ V2 deployer (exclude everything else = V1)
-const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
 function norm(a: string) {
   return a.trim().toLowerCase();
 }
 function isV2(r: RaffleListItem) {
   return norm(r.deployer ?? "") === norm(V2_DEPLOYER);
 }
+
+// ✅ V2 deployer (exclude everything else = V1)
+const V2_DEPLOYER = norm (ADDRESSES.SingleWinnerDeployer);
 
 export function useExploreRaffles(limit = 500) {
   const [items, setItems] = useState<RaffleListItem[] | null>(null);

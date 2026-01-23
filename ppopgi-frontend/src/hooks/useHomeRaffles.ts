@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RaffleListItem } from "../indexer/subgraph";
 import { fetchRafflesFromSubgraph } from "../indexer/subgraph";
 import { fetchRafflesOnChainFallback } from "../onchain/fallbackRaffles";
+import { ADDRESSES } from "../config/contracts";
 
 type Mode = "indexer" | "live";
 
@@ -12,7 +13,7 @@ function numOr0(v?: string | null) {
 }
 
 // ✅ V2 deployer (exclude everything else = V1)
-const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
+const V2_DEPLOYER = norm (ADDRESSES.SingleWinnerDeployer);
 function norm(a: string) {
   return a.trim().toLowerCase();
 }
