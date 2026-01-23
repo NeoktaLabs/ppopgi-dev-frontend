@@ -1,4 +1,4 @@
-l// src/onchain/fallbackRaffles.ts
+// src/onchain/fallbackRaffles.ts
 import { Contract, JsonRpcProvider } from "ethers";
 import { ADDRESSES } from "../config/contracts";
 import LotteryRegistryAbi from "../config/abis/LotteryRegistry.json";

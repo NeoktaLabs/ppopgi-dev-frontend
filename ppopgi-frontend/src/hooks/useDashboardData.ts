@@ -58,7 +58,7 @@ export function useDashboardData(account: string | null, limit = 200) {
 
       try {
         // 1) Load all raffles (indexer util you already have)
-        const all = await fetchRafflesFromSubgraph(controller.signal);
+        const all = await fetchRafflesFromSubgraph( { signal: controller.signal } );
         if (!alive) return;
 
         const createdMine = all.filter((r: any) => {

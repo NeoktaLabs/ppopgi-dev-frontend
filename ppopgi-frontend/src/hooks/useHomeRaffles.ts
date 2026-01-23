@@ -29,7 +29,7 @@ export function useHomeRaffles() {
       // 1) indexer-first (with timeout)
       try {
         const t = window.setTimeout(() => controller.abort(), 4500);
-        const data = await fetchRafflesFromSubgraph(controller.signal);
+        const data = await fetchRafflesFromSubgraph({ signal: controller.signal });
         window.clearTimeout(t);
 
         if (!alive) return;

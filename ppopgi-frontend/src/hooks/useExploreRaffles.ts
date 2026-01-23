@@ -29,7 +29,7 @@ export function useExploreRaffles(limit = 500) {
       try {
         t = window.setTimeout(() => controller.abort(), 4500);
 
-        const data = await fetchRafflesFromSubgraph(controller.signal);
+        const data = await fetchRafflesFromSubgraph({ signal: controller.signal });
 
         if (t) window.clearTimeout(t);
         t = null;
