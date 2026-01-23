@@ -4,7 +4,6 @@ import type { RaffleListItem } from "../indexer/subgraph";
 import { getContract, readContract } from "thirdweb";
 import { thirdwebClient } from "../thirdweb/client";
 import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
-import { ADDRESSES } from "../config/contracts";
 
 function mustEnv(name: string): string {
   const v = (import.meta as any).env?.[name];
@@ -20,12 +19,6 @@ function isHexAddress(a: string) {
   return /^0x[0-9a-fA-F]{40}$/.test(a);
 }
 
-// ✅ V2 deployer only (exclude everything else = V1)
-const V2_DEPLOYER = norm (ADDRESSES.SingleWinnerDeployer);
-function isV2Raffle(r: RaffleListItem) {
-  return norm(String(r?.deployer || "")) === norm(V2_DEPLOYER);
-}
-
 export type ClaimableRaffleItem = {
   raffle: RaffleListItem;
   roles: { created: boolean; participated: boolean };
@@ -35,7 +28,7 @@ export type ClaimableRaffleItem = {
   claimableNative: string; // raw uint256 as string
   isCreator: boolean;
 
-  // NEW: helps debug when UI shows 0 but reads failed
+  // helps debug when UI shows 0 but reads failed
   readErrors?: string[];
 };
 
@@ -50,9 +43,7 @@ async function readWithFallback<T>(
     const v = await readContract(args);
     return { ok: true, value: v as any as T };
   } catch (e1: any) {
-    if (!fallbackMethodName) {
-      return { ok: false, error: String(e1?.message || e1) };
-    }
+    if (!fallbackMethodName) return { ok: false, error: String(e1?.message || e1) };
 
     try {
       const v2 = await readContract({ ...(args as any), method: fallbackMethodName } as any);
@@ -81,7 +72,7 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
 
     async function fetchFromSubgraph(): Promise<{ merged: Merged }> {
       const url = mustEnv("VITE_SUBGRAPH_URL");
-      const user = me; // string lowercased
+      const user = me;
 
       const query = `
         query Claimables($user: Bytes!, $first: Int!) {
@@ -137,22 +128,18 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
       const json = await res.json();
       if (json?.errors?.length) throw new Error("SUBGRAPH_GQL_ERROR");
 
-      // ✅ Pull then filter to V2-only immediately
-      const createdAll = (json.data?.created ?? []) as RaffleListItem[];
+      const created = (json.data?.created ?? []) as RaffleListItem[];
       const participatedEvents = (json.data?.participated ?? []) as Array<{ raffle: any }>;
-      const participatedAll = participatedEvents.map((e) => e.raffle).filter(Boolean) as RaffleListItem[];
-
-      const created = createdAll.filter(isV2Raffle);
-      const participated = participatedAll.filter(isV2Raffle);
+      const participated = participatedEvents.map((e) => e.raffle).filter(Boolean) as RaffleListItem[];
 
       const byId = new Map<string, { raffle: RaffleListItem; roles: { created: boolean; participated: boolean } }>();
 
       for (const r of created) {
-        byId.set(norm(r.id), { raffle: r, roles: { created: true, participated: false } });
+        byId.set(norm(String(r.id)), { raffle: r, roles: { created: true, participated: false } });
       }
 
       for (const r of participated) {
-        const key = norm(r.id);
+        const key = norm(String(r.id));
         const prev = byId.get(key);
         if (prev) prev.roles.participated = true;
         else byId.set(key, { raffle: r, roles: { created: false, participated: true } });
@@ -172,14 +159,11 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
     async function enrichOnChain(merged: Merged): Promise<ClaimableRaffleItem[]> {
       if (!me) return [];
 
-      // ✅ extra safety: only enrich V2 (even if something weird slips through)
-      const mergedV2 = merged.filter((x) => isV2Raffle(x.raffle));
-
       const out: ClaimableRaffleItem[] = [];
       const batchSize = 10;
 
-      for (let i = 0; i < mergedV2.length; i += batchSize) {
-        const slice = mergedV2.slice(i, i + batchSize);
+      for (let i = 0; i < merged.length; i += batchSize) {
+        const slice = merged.slice(i, i + batchSize);
 
         const results = await Promise.all(
           slice.map(async ({ raffle, roles }) => {
@@ -248,7 +232,6 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
             };
 
             if (errors.length) item.readErrors = errors;
-
             return item;
           })
         );
@@ -288,11 +271,11 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
         setItems(enriched);
 
         const failed = enriched.filter((x) => (x.readErrors?.length ?? 0) > 0).length;
-        if (failed > 0) {
-          setNote(`Some on-chain reads failed (${failed}). If a card shows “0” incorrectly, hit Refresh.`);
-        } else {
-          setNote(null);
-        }
+        setNote(
+          failed > 0
+            ? `Some on-chain reads failed (${failed}). If a card shows “0” incorrectly, hit Refresh.`
+            : null
+        );
       } catch {
         if (!alive) return;
         setItems([]);
