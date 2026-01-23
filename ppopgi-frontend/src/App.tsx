@@ -13,6 +13,10 @@ import { ExplorePage } from "./pages/ExplorePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
 
+// ✅ Safety modal + details loader
+import { SafetyProofModal } from "./components/SafetyProofModal";
+import { useRaffleDetails } from "./hooks/useRaffleDetails";
+
 // ✅ Random backgrounds (picked once per page load)
 import bg1 from "./assets/backgrounds/bg1.webp";
 import bg2 from "./assets/backgrounds/bg2.webp";
@@ -78,8 +82,17 @@ export default function App() {
   const [createOpen, setCreateOpen] = useState(false);
   const [cashierOpen, setCashierOpen] = useState(false);
   const [createdHint, setCreatedHint] = useState<string | null>(null);
+
+  // Details modal
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedRaffleId, setSelectedRaffleId] = useState<string | null>(null);
+
+  // ✅ Safety modal (opened from shield on card)
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const [safetyRaffleId, setSafetyRaffleId] = useState<string | null>(null);
+
+  // ✅ load details for SafetyProofModal only when needed
+  const { data: safetyData } = useRaffleDetails(safetyRaffleId, safetyOpen);
 
   useEffect(() => setGateOpen(!hasAcceptedDisclaimer()), []);
   const onAcceptGate = () => {
@@ -109,12 +122,34 @@ export default function App() {
     setSelectedRaffleId(addr);
     setDetailsOpen(true);
     setRaffleQuery(addr);
+
+    // ✅ if safety is open, close it (avoid stacked modals)
+    setSafetyOpen(false);
+    setSafetyRaffleId(null);
   }
 
   function closeRaffle() {
     setDetailsOpen(false);
     setSelectedRaffleId(null);
     setRaffleQuery(null);
+  }
+
+  // ✅ Open safety from card shield
+  function openSafety(id: string) {
+    const addr = extractAddress(id) ?? id;
+
+    // ✅ avoid stacking modals: close details first
+    setDetailsOpen(false);
+    setSelectedRaffleId(null);
+    setRaffleQuery(null);
+
+    setSafetyRaffleId(addr);
+    setSafetyOpen(true);
+  }
+
+  function closeSafety() {
+    setSafetyOpen(false);
+    setSafetyRaffleId(null);
   }
 
   useEffect(() => {
@@ -361,9 +396,7 @@ export default function App() {
             </div>
           </div>
 
-          {page === "home" && homeNote && (
-            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{homeNote}</div>
-          )}
+          {page === "home" && homeNote && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{homeNote}</div>}
           {createdHint && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.95 }}>{createdHint}</div>}
 
           {/* HOME */}
@@ -389,20 +422,24 @@ export default function App() {
                   }}
                 >
                   <div className="pp-podium__silver">
-                    {podium.silver ? <RaffleCard raffle={podium.silver} onOpen={openRaffle} ribbon="silver" /> : null}
+                    {podium.silver ? (
+                      <RaffleCard raffle={podium.silver} onOpen={openRaffle} onOpenSafety={openSafety} ribbon="silver" />
+                    ) : null}
                   </div>
 
                   <div className="pp-podium__gold">
-                    {podium.gold ? <RaffleCard raffle={podium.gold} onOpen={openRaffle} ribbon="gold" /> : null}
+                    {podium.gold ? (
+                      <RaffleCard raffle={podium.gold} onOpen={openRaffle} onOpenSafety={openSafety} ribbon="gold" />
+                    ) : null}
                   </div>
 
                   <div className="pp-podium__bronze">
-                    {podium.bronze ? <RaffleCard raffle={podium.bronze} onOpen={openRaffle} ribbon="bronze" /> : null}
+                    {podium.bronze ? (
+                      <RaffleCard raffle={podium.bronze} onOpen={openRaffle} onOpenSafety={openSafety} ribbon="bronze" />
+                    ) : null}
                   </div>
 
-                  {bigPrizes.length === 0 && (
-                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>No active raffles right now.</div>
-                  )}
+                  {bigPrizes.length === 0 && <div style={{ opacity: 0.9, paddingLeft: 18 }}>No active raffles right now.</div>}
                 </div>
               </div>
 
@@ -420,12 +457,10 @@ export default function App() {
                 <div style={row5}>
                   {endingSoonSorted.map((r) => (
                     <div key={r.id} style={row5Item}>
-                      <RaffleCard raffle={r} onOpen={openRaffle} />
+                      <RaffleCard raffle={r} onOpen={openRaffle} onOpenSafety={openSafety} />
                     </div>
                   ))}
-                  {endingSoonSorted.length === 0 && (
-                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>Nothing is ending soon.</div>
-                  )}
+                  {endingSoonSorted.length === 0 && <div style={{ opacity: 0.9, paddingLeft: 18 }}>Nothing is ending soon.</div>}
                 </div>
               </div>
 
@@ -443,7 +478,7 @@ export default function App() {
                 <div style={row5}>
                   {latestTerminated.map((r) => (
                     <div key={r.id} style={row5Item}>
-                      <RaffleCard raffle={r} onOpen={openRaffle} />
+                      <RaffleCard raffle={r} onOpen={openRaffle} onOpenSafety={openSafety} />
                     </div>
                   ))}
                   {latestTerminated.length === 0 && (
@@ -464,6 +499,16 @@ export default function App() {
           <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
           <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
           <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
+
+          {/* ✅ Safety modal (from card shield) */}
+          {safetyOpen && safetyData ? (
+            <SafetyProofModal open={safetyOpen} onClose={closeSafety} raffle={safetyData} />
+          ) : (
+            // If open but data not ready yet, render nothing (keeps behavior simple/safe).
+            // We can add a nice loading card inside the safety modal in the next step if you want.
+            null
+          )}
+
           <CashierModal open={cashierOpen} onClose={() => setCashierOpen(false)} />
         </div>
       </div>
