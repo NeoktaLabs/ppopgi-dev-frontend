@@ -82,6 +82,14 @@ function formatWhen(tsSeconds: string | null | undefined) {
   }
 }
 
+function normalizeCancelReason(reason?: string | null) {
+  const r = (reason || "").trim().toLowerCase();
+  if (r.includes("min") && r.includes("ticket")) return "Min tickets sold not reached";
+  if (r.includes("minimum") && r.includes("ticket")) return "Min tickets sold not reached";
+  if (r.includes("not enough") && r.includes("ticket")) return "Min tickets sold not reached";
+  return reason?.trim() ? reason.trim() : "Canceled";
+}
+
 type DisplayStatus = "Open" | "Finalizing" | "Drawing" | "Settled" | "Canceled" | "Getting ready" | "Unknown";
 
 function baseStatusLabel(s: string) {
@@ -94,11 +102,9 @@ function baseStatusLabel(s: string) {
 }
 
 function statusTheme(s: DisplayStatus) {
-  // ✅ Open = green
   if (s === "Open")
     return { bg: "rgba(145, 247, 184, 0.92)", fg: "#0B4A24", border: "1px solid rgba(0,0,0,0.06)" };
 
-  // ✅ Finalizing = BLUE + pulse
   if (s === "Finalizing")
     return {
       bg: "rgba(169, 212, 255, 0.95)",
@@ -107,7 +113,6 @@ function statusTheme(s: DisplayStatus) {
       pulse: true,
     };
 
-  // ✅ Drawing = BLUE + pulse
   if (s === "Drawing")
     return {
       bg: "rgba(169, 212, 255, 0.95)",
@@ -116,11 +121,9 @@ function statusTheme(s: DisplayStatus) {
       pulse: true,
     };
 
-  // ✅ Settled = gold
   if (s === "Settled")
     return { bg: "rgba(255, 216, 154, 0.92)", fg: "#4A2A00", border: "1px solid rgba(0,0,0,0.08)" };
 
-  // ✅ Canceled = RED (no pulse)
   if (s === "Canceled")
     return {
       bg: "rgba(255, 120, 140, 0.92)",
@@ -128,7 +131,6 @@ function statusTheme(s: DisplayStatus) {
       border: "1px solid rgba(0,0,0,0.10)",
     };
 
-  // ✅ Getting ready = purple (calm)
   if (s === "Getting ready")
     return { bg: "rgba(203, 183, 246, 0.92)", fg: "#2E1C5C", border: "1px solid rgba(0,0,0,0.08)" };
 
@@ -180,7 +182,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     return Math.floor(v);
   }, [data?.minPurchaseAmount]);
 
-  // ✅ Same “Finalizing” logic as RaffleCard:
+  // ✅ Same “Finalizing” logic as RaffleCard
   const displayStatus: DisplayStatus = useMemo(() => {
     if (!data) return "Unknown";
     if (data.status === "OPEN" && deadlinePassed) return "Finalizing";
@@ -259,7 +261,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   const remaining = data && maxTicketsN > 0 ? Math.max(0, maxTicketsN - soldNow) : hardCap;
 
   const maxBuy = Math.max(minBuy, remaining);
-
   const ticketCount = clampInt(toInt(tickets, minBuy), minBuy, maxBuy);
 
   const ticketPriceU = data ? BigInt(data.ticketPrice) : 0n;
@@ -440,11 +441,12 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
   const card: React.CSSProperties = {
     position: "relative",
-    width: "min(720px, 100%)",
+    width: "min(780px, 100%)",
+    maxHeight: "min(86vh, 920px)",
+    overflow: "auto",
     borderRadius: 22,
     padding: 18,
     userSelect: "none",
-    overflow: "hidden",
     background:
       "linear-gradient(180deg, rgba(255,190,215,0.92), rgba(255,210,230,0.78) 42%, rgba(255,235,246,0.82))",
     border: "1px solid rgba(255,255,255,0.78)",
@@ -594,7 +596,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   };
 
   const miniValue: React.CSSProperties = { marginTop: 6, fontSize: 14, fontWeight: 950, color: inkStrong };
-
   const hint: React.CSSProperties = { marginTop: 4, fontSize: 11, fontWeight: 800, opacity: 0.88, color: ink };
 
   const section: React.CSSProperties = { marginTop: 12 };
@@ -652,6 +653,32 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
   const pulseBottom = displayStatus === "Finalizing" || displayStatus === "Drawing";
 
+  // ✅ Match RaffleCard’s “past block” behavior using subgraph history
+  const pastHeadline = useMemo(() => {
+    const h = data?.history;
+    if (!data) return null;
+
+    if (displayStatus === "Settled") {
+      const when = h?.completedAt ?? h?.finalizedAt ?? null;
+      return `Settled at ${formatWhen(when)}`;
+    }
+    if (displayStatus === "Canceled") {
+      return `Canceled at ${formatWhen(h?.canceledAt ?? null)}`;
+    }
+    if (displayStatus === "Drawing" || displayStatus === "Finalizing") return "Draw in progress";
+    return null;
+  }, [data, displayStatus]);
+
+  const pastSubline = useMemo(() => {
+    const h = data?.history;
+    if (!data) return null;
+
+    if (displayStatus === "Settled") return data.winner && !isZeroAddr(data.winner) ? "Someone won!" : "Settled";
+    if (displayStatus === "Canceled") return normalizeCancelReason(h?.canceledReason ?? null);
+    if (displayStatus === "Drawing" || displayStatus === "Finalizing") return "Waiting for the result";
+    return null;
+  }, [data, displayStatus]);
+
   const bottomLine = useMemo(() => {
     if (displayStatus === "Open" || displayStatus === "Getting ready") return formatEndsIn(data?.deadline || "0", nowMs);
     if (displayStatus === "Finalizing" || displayStatus === "Drawing") return "Draw in progress";
@@ -703,6 +730,32 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
             {data?.name ?? "Loading…"}
           </div>
           {raffleId ? <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75, color: ink }}>{raffleId}</div> : null}
+
+          {/* ✅ card-like “past block” right under title when not open-ish */}
+          {data && displayStatus !== "Open" && displayStatus !== "Getting ready" && (
+            <div
+              style={{
+                marginTop: 10,
+                borderRadius: 14,
+                padding: 12,
+                background: "rgba(255,255,255,0.56)",
+                border: "1px solid rgba(0,0,0,0.06)",
+                display: "grid",
+                gap: 6,
+                textAlign: "left",
+              }}
+            >
+              <div
+                style={{ fontSize: 12, fontWeight: 950, color: inkStrong, lineHeight: 1.25 }}
+                className={pulseBottom ? "pp-rc-pulse" : undefined}
+              >
+                {pastHeadline ?? bottomLine}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: ink, opacity: 0.92, lineHeight: 1.25 }}>
+                {pastSubline ?? ""}
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={prizeKicker}>Winner gets</div>
@@ -728,7 +781,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           </div>
         </div>
 
-        {/* Extra V2 tiles */}
+        {/* Extra tiles */}
         <div style={grid3}>
           <div style={mini}>
             <div style={miniLabel}>Revenue</div>
@@ -748,6 +801,25 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
             <div style={hint}>{formatWhen(data?.deadline)}</div>
           </div>
         </div>
+
+        {/* Optional creation metadata (subgraph) */}
+        {data?.history?.createdAtTimestamp && (
+          <div style={section}>
+            <div style={panel}>
+              <div style={{ fontWeight: 1000, color: inkStrong }}>Details</div>
+              <div style={row}>
+                <div style={label}>Created</div>
+                <div style={value}>{formatWhen(data.history.createdAtTimestamp)}</div>
+              </div>
+              {data.history.creationTx ? (
+                <div style={row}>
+                  <div style={label}>Creation tx</div>
+                  <div style={value}>{short(data.history.creationTx)}</div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
 
         {/* Loading + note */}
         {loading && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85, color: inkStrong }}>Loading live details…</div>}
@@ -800,8 +872,8 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
               </div>
 
               <div style={{ fontSize: 12, opacity: 0.9, color: ink, lineHeight: 1.35 }}>
-                The app only reads contract state and prepares transactions for you to confirm.
-                If something is not claimable/withdrawable, it will fail on-chain.
+                The app only reads contract state and prepares transactions for you to confirm. If something is not
+                claimable/withdrawable, it will fail on-chain.
               </div>
             </div>
           </div>
@@ -924,10 +996,7 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
             {displayStatus === "Open" || displayStatus === "Getting ready" ? (
               `Ends in ${bottomLine}`
             ) : (
-              <span
-                className={pulseBottom ? "pp-rc-pulse" : undefined}
-                style={pulseBottom ? { color: "#0B2E5C" } : undefined}
-              >
+              <span className={pulseBottom ? "pp-rc-pulse" : undefined} style={pulseBottom ? { color: "#0B2E5C" } : undefined}>
                 {bottomLine}
               </span>
             )}
