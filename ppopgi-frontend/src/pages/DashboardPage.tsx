@@ -4,6 +4,8 @@ import { formatUnits } from "ethers";
 import { RaffleCard } from "../components/RaffleCard";
 
 import { useClaimableRaffles } from "../hooks/useClaimableRaffles";
+import { useDashboardData } from "../hooks/useDashboardData"; // ✅ use true dashboard hook
+
 import { getContract, prepareContractCall } from "thirdweb";
 import { useSendAndConfirmTransaction } from "thirdweb/react";
 import { thirdwebClient } from "../thirdweb/client";
@@ -28,6 +30,16 @@ function fmtNative(raw: string) {
   } catch {
     return "0";
   }
+}
+
+function norm(a: string) {
+  return (a || "").trim().toLowerCase();
+}
+
+// ✅ V2 deployer (exclude everything else = V1)
+const V2_DEPLOYER = "0x6050196520e7010Aa39C8671055B674851E2426D";
+function isV2Raffle(r: any) {
+  return norm(r?.deployer ?? "") === norm(V2_DEPLOYER);
 }
 
 // ✅ Minimal ABI so thirdweb can type prepareContractCall
@@ -55,24 +67,36 @@ const RAFFLE_MIN_ABI = [
   },
 ] as const;
 
-// ✅ With ABI present, thirdweb expects method NAME (not "function ...()")
 type MethodName = "withdrawFunds" | "withdrawNative" | "claimTicketRefund";
 
 export function DashboardPage({ account, onOpenRaffle }: Props) {
-  const { items, note, refetch } = useClaimableRaffles(account, 250);
+  // ✅ True dashboard data
+  const dash = useDashboardData(account, 250);
+
+  // ✅ Claimables data (for action buttons only)
+  const claim = useClaimableRaffles(account, 250);
 
   const { mutateAsync: sendAndConfirm, isPending } = useSendAndConfirmTransaction();
   const [msg, setMsg] = useState<string | null>(null);
 
+  // ✅ V2-only dashboard lists
   const created = useMemo(() => {
-    if (!items) return null;
-    return items.filter((it) => it.roles.created);
-  }, [items]);
+    const list = dash.created ?? null;
+    if (!list) return null;
+    return list.filter(isV2Raffle);
+  }, [dash.created]);
 
   const joined = useMemo(() => {
-    if (!items) return null;
-    return items.filter((it) => it.roles.participated);
-  }, [items]);
+    const list = dash.joined ?? null;
+    if (!list) return null;
+    return list.filter(isV2Raffle);
+  }, [dash.joined]);
+
+  // ✅ V2-only claimables list
+  const claimables = useMemo(() => {
+    if (!claim.items) return null;
+    return claim.items.filter((it: any) => isV2Raffle(it?.raffle));
+  }, [claim.items]);
 
   const section: React.CSSProperties = {
     marginTop: 18,
@@ -130,13 +154,13 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
 
       const tx = prepareContractCall({
         contract: raffleContract,
-        method, // ✅ now a method name
+        method,
         params: [] as const,
       });
 
       await sendAndConfirm(tx);
       setMsg("Done.");
-      refetch();
+      claim.refetch();
     } catch (e: any) {
       const m = String(e?.message || "");
       if (m.toLowerCase().includes("rejected")) setMsg("Action canceled.");
@@ -144,7 +168,7 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
     }
   }
 
-  function renderItem(it: any) {
+  function renderClaimableItem(it: any) {
     const raffle = it.raffle;
 
     const hasUsdc = BigInt(it.claimableUsdc || "0") > 0n;
@@ -229,24 +253,41 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div style={{ fontSize: 12, opacity: 0.8 }}>{account ? "Your activity" : "Sign in required"}</div>
 
-          <button style={pill} onClick={refetch} disabled={isPending}>
+          <button
+            style={pill}
+            onClick={() => {
+              dash.refetch();
+              claim.refetch();
+            }}
+            disabled={isPending}
+          >
             Refresh
           </button>
         </div>
       </div>
 
-      {note && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>{note}</div>}
+      {(dash.note || claim.note) && (
+        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
+          {dash.note || claim.note}
+        </div>
+      )}
       {msg && <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>{msg}</div>}
 
+      {/* ✅ Created */}
       <div style={section}>
         <div style={{ fontWeight: 800 }}>Your created raffles</div>
         <div style={grid}>
           {!created && <div style={{ opacity: 0.85, fontSize: 13 }}>Loading…</div>}
           {created && created.length === 0 && <div style={{ opacity: 0.85, fontSize: 13 }}>No created raffles yet.</div>}
-          {created?.map(renderItem)}
+          {created?.map((raffle) => (
+            <div key={raffle.id}>
+              <RaffleCard raffle={raffle} onOpen={onOpenRaffle} />
+            </div>
+          ))}
         </div>
       </div>
 
+      {/* ✅ Joined */}
       <div style={section}>
         <div style={{ fontWeight: 800 }}>Raffles you joined</div>
         <div style={grid}>
@@ -254,7 +295,23 @@ export function DashboardPage({ account, onOpenRaffle }: Props) {
           {joined && joined.length === 0 && (
             <div style={{ opacity: 0.85, fontSize: 13 }}>You haven’t joined any raffles yet.</div>
           )}
-          {joined?.map(renderItem)}
+          {joined?.map((raffle) => (
+            <div key={raffle.id}>
+              <RaffleCard raffle={raffle} onOpen={onOpenRaffle} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ✅ Claimables (actions live here, separated on purpose) */}
+      <div style={section}>
+        <div style={{ fontWeight: 800 }}>Claimables</div>
+        <div style={grid}>
+          {!claimables && <div style={{ opacity: 0.85, fontSize: 13 }}>Loading…</div>}
+          {claimables && claimables.length === 0 && (
+            <div style={{ opacity: 0.85, fontSize: 13 }}>Nothing to claim right now.</div>
+          )}
+          {claimables?.map(renderClaimableItem)}
         </div>
       </div>
     </div>
