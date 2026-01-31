@@ -56,6 +56,36 @@ async function readWithFallback<T>(
   }
 }
 
+function safeBigInt(x: any): bigint {
+  try {
+    return BigInt(x ?? "0");
+  } catch {
+    return 0n;
+  }
+}
+
+function shouldKeepZeroRow(item: {
+  raffle: any;
+  roles: { created: boolean; participated: boolean };
+  readErrors?: string[];
+  claimableUsdc: bigint;
+  claimableNative: bigint;
+}) {
+  // If reads failed, keep so user can refresh and not miss money.
+  if ((item.readErrors?.length ?? 0) > 0) return true;
+
+  // If there is ANY value, keep.
+  if (item.claimableUsdc > 0n || item.claimableNative > 0n) return true;
+
+  // Refunds often happen on canceled raffles. Keep those for participants.
+  // (Even if your claimableFunds/native reads show 0, the refund path may still exist.)
+  const status = String(item.raffle?.status || "");
+  if (item.roles.participated && status === "CANCELED") return true;
+
+  // Otherwise: definitely nothing to claim -> drop it.
+  return false;
+}
+
 export function useClaimableRaffles(userAddress: string | null, limit = 200) {
   const [items, setItems] = useState<ClaimableRaffleItem[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -162,6 +192,9 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
       const out: ClaimableRaffleItem[] = [];
       const batchSize = 10;
 
+      // small perf win: reuse contract objects in this run
+      const contractCache = new Map<string, any>();
+
       for (let i = 0; i < merged.length; i += batchSize) {
         const slice = merged.slice(i, i + batchSize);
 
@@ -181,11 +214,15 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
               } satisfies ClaimableRaffleItem;
             }
 
-            const raffleContract = getContract({
-              client: thirdwebClient,
-              chain: ETHERLINK_CHAIN,
-              address: addr,
-            });
+            let raffleContract = contractCache.get(addr);
+            if (!raffleContract) {
+              raffleContract = getContract({
+                client: thirdwebClient,
+                chain: ETHERLINK_CHAIN,
+                address: addr,
+              });
+              contractCache.set(addr, raffleContract);
+            }
 
             const rFunds = await readWithFallback<bigint>(
               {
@@ -207,20 +244,11 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
             );
             if (!rNative.ok) errors.push(`claimableNative: ${rNative.error}`);
 
-            const rCreator = await readWithFallback<string>(
-              {
-                contract: raffleContract,
-                method: "function creator() view returns (address)",
-                params: [],
-              } as any,
-              "creator"
-            );
-            if (!rCreator.ok) errors.push(`creator: ${rCreator.error}`);
+            const claimableUsdc = rFunds.ok ? safeBigInt(rFunds.value as any) : 0n;
+            const claimableNative = rNative.ok ? safeBigInt(rNative.value as any) : 0n;
 
-            const claimableUsdc = rFunds.ok ? BigInt(rFunds.value as any) : 0n;
-            const claimableNative = rNative.ok ? BigInt(rNative.value as any) : 0n;
-
-            const creatorAddr = rCreator.ok ? norm(String(rCreator.value)) : "0x0";
+            // ✅ no on-chain creator() read: use subgraph field instead
+            const creatorAddr = raffle.creator ? norm(String(raffle.creator)) : "";
             const isCreator = creatorAddr === me;
 
             const item: ClaimableRaffleItem = {
@@ -232,11 +260,29 @@ export function useClaimableRaffles(userAddress: string | null, limit = 200) {
             };
 
             if (errors.length) item.readErrors = errors;
+
+            // ✅ drop "definitely nothing" rows so they don't stick around after claiming
+            if (
+              !shouldKeepZeroRow({
+                raffle,
+                roles,
+                readErrors: item.readErrors,
+                claimableUsdc,
+                claimableNative,
+              })
+            ) {
+              // return a sentinel null-ish; filtered by caller
+              return null as any;
+            }
+
             return item;
           })
         );
 
-        out.push(...results);
+        for (const r of results) {
+          if (r) out.push(r);
+        }
+
         if (!alive) return out;
       }
 
