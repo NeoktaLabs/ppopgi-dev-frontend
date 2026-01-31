@@ -302,10 +302,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
 
       // Best-effort: thirdweb receipts vary. We keep it safe + non-blocking.
       // If you later want the real address reliably, we can parse the LotteryDeployed event from the deployer.
-      const maybeAddr =
-        receipt?.result?.lotteryAddr ||
-        receipt?.receipt?.logs?.[0]?.address ||
-        null;
+      const maybeAddr = receipt?.result?.lotteryAddr || receipt?.receipt?.logs?.[0]?.address || null;
 
       setCreatedRaffleAddr(typeof maybeAddr === "string" ? maybeAddr : null);
       setMsg("🎉 Raffle created! Share it with your friends.");
@@ -331,8 +328,6 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
       setMsg("Couldn’t copy automatically. You can copy the link from your address bar.");
     }
   }
-
-  if (!open) return null;
 
   // ----------------- STYLE -----------------
   const overlay: React.CSSProperties = {
@@ -613,14 +608,17 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
     if (hasEnoughAllowance) return <span style={pillGood}>Approved ✓</span>;
     if (approvedOnce) return <span style={pillWarn}>Approval pending?</span>;
     return <span style={pill}>Not approved</span>;
-  }, [me, allowLoading, requiredAllowanceU, hasEnoughAllowance, approvedOnce]);
+  }, [me, allowLoading, requiredAllowanceU, hasEnoughAllowance, approvedOnce, pill, pillGood, pillWarn]);
 
   const balancePill = useMemo(() => {
     if (!me) return null;
     if (allowLoading) return <span style={pill}>USDC: …</span>;
     if (usdcBal === null) return <span style={pill}>USDC: —</span>;
     return <span style={pill}>USDC: {fmtUsdc(usdcBal)}</span>;
-  }, [me, allowLoading, usdcBal]);
+  }, [me, allowLoading, usdcBal, pill]);
+
+  // ✅ IMPORTANT: only return null AFTER all hooks have run (prevents hook order crash)
+  if (!open) return null;
 
   return (
     <div style={overlay} onMouseDown={onClose}>
@@ -629,9 +627,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
         <div style={header}>
           <div>
             <h3 style={title}>Create a raffle</h3>
-            <div style={subtitle}>
-              You’ll always confirm in your wallet. We’ll never do anything silently.
-            </div>
+            <div style={subtitle}>You’ll always confirm in your wallet. We’ll never do anything silently.</div>
           </div>
 
           <button onClick={onClose} style={closeBtn} aria-label="Close">
@@ -657,12 +653,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                   <div style={inputLabel}>
                     <span>Name</span>
                   </div>
-                  <input
-                    style={input}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Ppopgi #12"
-                  />
+                  <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ppopgi #12" />
                   <div style={tip}>This is what people will see on the raffle card.</div>
                 </div>
 
@@ -805,12 +796,8 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                         </div>
                       </div>
 
-                      {!ticketsOk && (
-                        <div style={pillWarn}>Max tickets must be ≥ minimum tickets.</div>
-                      )}
-                      {!minPurchaseOk && (
-                        <div style={pillWarn}>Min purchase must be ≤ max tickets (or keep max unlimited).</div>
-                      )}
+                      {!ticketsOk && <div style={pillWarn}>Max tickets must be ≥ minimum tickets.</div>}
+                      {!minPurchaseOk && <div style={pillWarn}>Min purchase must be ≤ max tickets (or keep max unlimited).</div>}
                     </div>
                   </div>
                 )}
@@ -873,9 +860,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                   </div>
                 )}
 
-                <div style={centeredNote}>
-                  Nothing happens automatically — you always confirm in your wallet.
-                </div>
+                <div style={centeredNote}>Nothing happens automatically — you always confirm in your wallet.</div>
               </div>
             </div>
 
@@ -884,12 +869,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
               <div style={secTitle}>
                 <span>Network details</span>
 
-                <button
-                  style={tinyToggle}
-                  onClick={() => setNetOpen((v) => !v)}
-                  type="button"
-                  aria-expanded={netOpen}
-                >
+                <button style={tinyToggle} onClick={() => setNetOpen((v) => !v)} type="button" aria-expanded={netOpen}>
                   <span style={{ fontSize: 14, lineHeight: 1 }}>{netOpen ? "−" : "+"}</span>
                   <span>{netOpen ? "Hide" : "Show"}</span>
                 </button>
@@ -901,9 +881,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                 </div>
               ) : (
                 <div style={{ display: "grid", gap: 8 }}>
-                  <div style={tip}>
-                    These are the on-chain contracts used to create raffles.
-                  </div>
+                  <div style={tip}>These are the on-chain contracts used to create raffles.</div>
 
                   <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -949,9 +927,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
                       <span style={{ opacity: 0.75, fontWeight: 800 }}>Entropy provider</span>
                       <a
                         style={addrLink}
-                        href={etherlinkExplorerAddrUrl(
-                          String(data?.entropyProvider || "0x0000000000000000000000000000000000000000")
-                        )}
+                        href={etherlinkExplorerAddrUrl(String(data?.entropyProvider || "0x0000000000000000000000000000000000000000"))}
                         target="_blank"
                         rel="noreferrer"
                         title="Open in explorer"
