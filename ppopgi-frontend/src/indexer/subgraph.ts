@@ -169,10 +169,14 @@ export async function fetchRafflesFromSubgraph(
 
   const json = await res.json();
   if (json?.errors?.length) {
-    // Keep errors accessible for debugging without leaking huge payloads.
-    // (You can log json.errors in dev if you want.)
     throw new Error("SUBGRAPH_GQL_ERROR");
   }
 
-  return (json.data?.raffles ?? []) as RaffleListItem[];
+  const raffles = (json.data?.raffles ?? []) as RaffleListItem[];
+
+  // ✅ normalize ids for stable comparisons + map keys across the app
+  return raffles.map((r) => ({
+    ...r,
+    id: String(r.id).toLowerCase(),
+  }));
 }
