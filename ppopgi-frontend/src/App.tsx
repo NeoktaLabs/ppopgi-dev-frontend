@@ -26,6 +26,9 @@ import { ETHERLINK_CHAIN } from "./thirdweb/etherlink";
 import { SafetyProofModal } from "./components/SafetyProofModal";
 import { useRaffleDetails } from "./hooks/useRaffleDetails";
 
+// ✅ Top nav
+import { TopNav } from "./components/TopNav";
+
 // ✅ Random backgrounds (picked once per page load)
 import bg1 from "./assets/backgrounds/bg1.webp";
 import bg2 from "./assets/backgrounds/bg2.webp";
@@ -36,11 +39,6 @@ import "./pages/homeTickets.css";
 
 const BACKGROUNDS = [bg1, bg2, bg3];
 const pickRandomBg = () => BACKGROUNDS[Math.floor(Math.random() * BACKGROUNDS.length)];
-
-function short(a: string) {
-  if (!a) return "—";
-  return `${a.slice(0, 6)}…${a.slice(-4)}`;
-}
 
 type Page = "home" | "explore" | "dashboard";
 
@@ -77,7 +75,6 @@ function num(v: any): number {
 
 export default function App() {
   // ✅ Persist wallet session across refresh (thirdweb auto reconnect)
-  // Keep the wallet list conservative (MetaMask first). Add others later if you want.
   useAutoConnect({
     client: thirdwebClient,
     chain: ETHERLINK_CHAIN,
@@ -200,6 +197,17 @@ export default function App() {
     setCreatedHint(null);
   }
 
+  // ✅ Option B navigation handler
+  function onNavigate(next: Page) {
+    // guard: dashboard requires wallet
+    if (next === "dashboard" && !account) {
+      setSignInOpen(true);
+      setPage("home");
+      return;
+    }
+    setPage(next);
+  }
+
   /* ───────────── styles ───────────── */
 
   const pageBg: React.CSSProperties = {
@@ -223,95 +231,6 @@ export default function App() {
     maxWidth: 1400,
     margin: "0 auto",
     padding: "18px 16px",
-  };
-
-  // ✅ New topbar visuals (matches your cards/modals vibe)
-  const topbar: React.CSSProperties = {
-    display: "flex",
-    gap: 12,
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    padding: 12,
-    borderRadius: 18,
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.70), rgba(255,255,255,0.45))," +
-      "radial-gradient(900px 220px at 15% 0%, rgba(255,141,187,0.18), rgba(255,141,187,0) 55%)," +
-      "radial-gradient(900px 220px at 85% 0%, rgba(203,183,246,0.18), rgba(203,183,246,0) 55%)",
-    border: "1px solid rgba(255,255,255,0.65)",
-    boxShadow: "0 14px 30px rgba(0,0,0,0.14)",
-    backdropFilter: "blur(10px)",
-  };
-
-  const brandPill: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "10px 12px",
-    borderRadius: 999,
-    fontWeight: 1000 as any,
-    letterSpacing: 0.25,
-    cursor: "pointer",
-    userSelect: "none",
-    background: "rgba(255,255,255,0.85)",
-    border: "1px solid rgba(0,0,0,0.10)",
-    color: "#4A0F2B",
-  };
-
-  const brandDot: React.CSSProperties = {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    background: "linear-gradient(135deg, #FF8DBB, #CBB7F6)",
-    boxShadow: "0 8px 14px rgba(0,0,0,0.14)",
-  };
-
-  const navGroup: React.CSSProperties = {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "center",
-  };
-
-  const ink = "#4A0F2B";
-
-  const topBtn: React.CSSProperties = {
-    border: "1px solid rgba(0,0,0,0.12)",
-    background: "rgba(255,255,255,0.78)",
-    borderRadius: 14,
-    padding: "10px 12px",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    fontWeight: 950,
-    color: ink,
-  };
-
-  const topBtnActive: React.CSSProperties = {
-    ...topBtn,
-    border: "1px solid rgba(0,0,0,0.22)",
-    background: "rgba(255,255,255,0.92)",
-    boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
-  };
-
-  const topBtnPrimary: React.CSSProperties = {
-    ...topBtn,
-    background: "rgba(25,25,35,0.92)",
-    color: "white",
-    border: "1px solid rgba(0,0,0,0.10)",
-  };
-
-  const acctPill: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "10px 12px",
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.70)",
-    border: "1px solid rgba(0,0,0,0.10)",
-    fontWeight: 950,
-    color: ink,
-    whiteSpace: "nowrap",
   };
 
   // ✅ “Glass border” section: keeps your background visible
@@ -442,60 +361,18 @@ export default function App() {
         <div style={container}>
           <DisclaimerGate open={gateOpen} onAccept={onAcceptGate} />
 
-          {/* ✅ Top bar (refit) */}
-          <div style={topbar}>
-            <div style={brandPill} onClick={() => setPage("home")} title="Go home">
-              <span style={brandDot} />
-              Ppopgi
-            </div>
-
-            <div style={navGroup}>
-              <button
-                style={page === "explore" ? topBtnActive : topBtn}
-                onClick={() => setPage("explore")}
-              >
-                Explore
-              </button>
-
-              {account && (
-                <button
-                  style={page === "dashboard" ? topBtnActive : topBtn}
-                  onClick={() => setPage("dashboard")}
-                >
-                  Dashboard
-                </button>
-              )}
-
-              <button
-                style={topBtnPrimary}
-                onClick={() => (account ? setCreateOpen(true) : setSignInOpen(true))}
-              >
-                Create
-              </button>
-            </div>
-
-            <div style={navGroup}>
-              <button style={topBtn} onClick={() => setCashierOpen(true)}>
-                Cashier
-              </button>
-
-              {!account ? (
-                <button style={topBtn} onClick={() => setSignInOpen(true)}>
-                  Sign in
-                </button>
-              ) : (
-                <>
-                  <span style={acctPill} title={account}>
-                    <span style={{ opacity: 0.85 }}>Account</span>
-                    <b style={{ letterSpacing: 0.2 }}>{short(account)}</b>
-                  </span>
-                  <button style={topBtn} onClick={onSignOut}>
-                    Sign out
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
+          {/* ✅ Top nav (extracted) */}
+          <TopNav
+            page={page}
+            account={account}
+            onNavigate={onNavigate}
+            onOpenExplore={() => {}}
+            onOpenDashboard={() => {}}
+            onOpenCreate={() => (account ? setCreateOpen(true) : setSignInOpen(true))}
+            onOpenCashier={() => setCashierOpen(true)}
+            onOpenSignIn={() => setSignInOpen(true)}
+            onSignOut={onSignOut}
+          />
 
           {page === "home" && homeNote && (
             <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>{homeNote}</div>
@@ -528,41 +405,24 @@ export default function App() {
                 >
                   <div className="pp-podium__silver">
                     {podium.silver ? (
-                      <RaffleCard
-                        raffle={podium.silver}
-                        onOpen={openRaffle}
-                        onOpenSafety={openSafety}
-                        ribbon="silver"
-                      />
+                      <RaffleCard raffle={podium.silver} onOpen={openRaffle} onOpenSafety={openSafety} ribbon="silver" />
                     ) : null}
                   </div>
 
                   <div className="pp-podium__gold">
                     {podium.gold ? (
-                      <RaffleCard
-                        raffle={podium.gold}
-                        onOpen={openRaffle}
-                        onOpenSafety={openSafety}
-                        ribbon="gold"
-                      />
+                      <RaffleCard raffle={podium.gold} onOpen={openRaffle} onOpenSafety={openSafety} ribbon="gold" />
                     ) : null}
                   </div>
 
                   <div className="pp-podium__bronze">
                     {podium.bronze ? (
-                      <RaffleCard
-                        raffle={podium.bronze}
-                        onOpen={openRaffle}
-                        onOpenSafety={openSafety}
-                        ribbon="bronze"
-                      />
+                      <RaffleCard raffle={podium.bronze} onOpen={openRaffle} onOpenSafety={openSafety} ribbon="bronze" />
                     ) : null}
                   </div>
 
                   {bigPrizes.length === 0 && (
-                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>
-                      No active raffles right now.
-                    </div>
+                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>No active raffles right now.</div>
                   )}
                 </div>
               </div>
@@ -585,9 +445,7 @@ export default function App() {
                     </div>
                   ))}
                   {endingSoonSorted.length === 0 && (
-                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>
-                      Nothing is ending soon.
-                    </div>
+                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>Nothing is ending soon.</div>
                   )}
                 </div>
               </div>
@@ -610,9 +468,7 @@ export default function App() {
                     </div>
                   ))}
                   {latestTerminated.length === 0 && (
-                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>
-                      No terminated raffles to show yet.
-                    </div>
+                    <div style={{ opacity: 0.9, paddingLeft: 18 }}>No terminated raffles to show yet.</div>
                   )}
                 </div>
               </div>
@@ -627,11 +483,7 @@ export default function App() {
 
           {/* Modals */}
           <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
-          <CreateRaffleModal
-            open={createOpen}
-            onClose={() => setCreateOpen(false)}
-            onCreated={onCreatedRaffle}
-          />
+          <CreateRaffleModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={onCreatedRaffle} />
           <RaffleDetailsModal open={detailsOpen} raffleId={selectedRaffleId} onClose={closeRaffle} />
 
           {/* ✅ Safety modal (from card shield) */}
