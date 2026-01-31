@@ -144,6 +144,28 @@ function statusTheme(s: DisplayStatus) {
   return { bg: "rgba(255,255,255,0.72)", fg: "#5C2A3E", border: "1px solid rgba(0,0,0,0.08)" };
 }
 
+// ✅ reason helper: what to show when buying is disabled
+function joinBlockedReason(
+  data: any | null,
+  deadlinePassed: boolean,
+  displayStatus: DisplayStatus,
+  raffleNotJoinableReason: string | null
+) {
+  if (!data) return "Loading raffle…";
+
+  // Prefer your existing computed message if present
+  if (raffleNotJoinableReason) return raffleNotJoinableReason;
+
+  // Fallbacks (should rarely hit)
+  if (data.paused) return "This raffle is paused right now.";
+  if (data.status === "FUNDING_PENDING") return "This raffle is getting ready. Try again soon.";
+  if (data.status === "OPEN" && deadlinePassed) return "Time ended — this raffle is finalizing right now.";
+  if (displayStatus === "Canceled") return "This raffle was canceled.";
+  if (displayStatus === "Settled") return "This raffle is settled — you can’t buy tickets anymore.";
+  if (displayStatus === "Drawing" || displayStatus === "Finalizing") return "Draw in progress — buying is closed.";
+  return "This raffle can’t be joined right now.";
+}
+
 export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
   const { data, loading, note } = useRaffleDetails(raffleId, open);
 
@@ -887,86 +909,102 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
           </div>
         )}
 
-        {/* Join panel */}
+        {/* ✅ Join panel (hide buy UI when not joinable) */}
         <div style={section}>
           <div style={panel}>
-            <div style={{ fontWeight: 1000, color: inkStrong }}>Join</div>
+            <div style={{ fontWeight: 1000, color: inkStrong }}>{raffleIsOpen ? "Join" : "Join unavailable"}</div>
 
-            {raffleNotJoinableReason && (
-              <div style={{ fontSize: 13, opacity: 0.92, color: inkStrong }}>{raffleNotJoinableReason}</div>
-            )}
+            {!raffleIsOpen ? (
+              <>
+                <div style={{ fontSize: 13, opacity: 0.92, color: inkStrong }}>
+                  {joinBlockedReason(data, deadlinePassed, displayStatus, raffleNotJoinableReason)}
+                </div>
 
-            <div style={row}>
-              <div style={label}>Total cost</div>
-              <div style={value}>{fmtUsdc(totalCostU.toString())} USDC</div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 44px", gap: 10 }}>
-              <button
-                style={ticketCount > minBuy ? btnEnabled : btnDisabled}
-                disabled={ticketCount <= minBuy}
-                onClick={() => setTicketsSafe(ticketCount - 1)}
-                type="button"
-              >
-                −
-              </button>
-
-              <input
-                style={input}
-                value={tickets}
-                onChange={(e) => setTickets(cleanIntInput(e.target.value))}
-                onBlur={() => setTicketsSafe(toInt(tickets, minBuy))}
-                placeholder={String(minBuy)}
-                inputMode="numeric"
-                pattern="[0-9]*"
-              />
-
-              <button
-                style={ticketCount < maxBuy ? btnEnabled : btnDisabled}
-                disabled={ticketCount >= maxBuy}
-                onClick={() => setTicketsSafe(ticketCount + 1)}
-                type="button"
-              >
-                +
-              </button>
-            </div>
-
-            <div style={{ fontSize: 12, opacity: 0.9, color: ink }}>
-              Min: {minBuy} • Max: {maxBuy}
-            </div>
-
-            {isConnected ? (
-              <div style={{ fontSize: 12, opacity: 0.85, color: ink }}>
-                {allowLoading ? (
-                  "Checking coins…"
-                ) : (
-                  <>
-                    {usdcBal !== null ? `Your coins: ${fmtUsdc(usdcBal.toString())} USDC • ` : ""}
-                    {allowance !== null ? `Allowed: ${fmtUsdc(allowance.toString())} USDC` : ""}
-                  </>
-                )}
-              </div>
+                <div style={{ fontSize: 12, opacity: 0.85, color: ink, lineHeight: 1.35 }}>
+                  {displayStatus === "Finalizing" || displayStatus === "Drawing"
+                    ? "Once the draw completes, the Winner section will update here."
+                    : displayStatus === "Settled"
+                    ? "Check the Winner section below."
+                    : displayStatus === "Canceled"
+                    ? "If you’re owed a refund, it will become claimable on-chain."
+                    : ""}
+                </div>
+              </>
             ) : (
-              <div style={{ fontSize: 12, opacity: 0.85, color: ink }}>Please sign in to join.</div>
+              <>
+                <div style={row}>
+                  <div style={label}>Total cost</div>
+                  <div style={value}>{fmtUsdc(totalCostU.toString())} USDC</div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 44px", gap: 10 }}>
+                  <button
+                    style={ticketCount > minBuy ? btnEnabled : btnDisabled}
+                    disabled={ticketCount <= minBuy}
+                    onClick={() => setTicketsSafe(ticketCount - 1)}
+                    type="button"
+                  >
+                    −
+                  </button>
+
+                  <input
+                    style={input}
+                    value={tickets}
+                    onChange={(e) => setTickets(cleanIntInput(e.target.value))}
+                    onBlur={() => setTicketsSafe(toInt(tickets, minBuy))}
+                    placeholder={String(minBuy)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                  />
+
+                  <button
+                    style={ticketCount < maxBuy ? btnEnabled : btnDisabled}
+                    disabled={ticketCount >= maxBuy}
+                    onClick={() => setTicketsSafe(ticketCount + 1)}
+                    type="button"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div style={{ fontSize: 12, opacity: 0.9, color: ink }}>
+                  Min: {minBuy} • Max: {maxBuy}
+                </div>
+
+                {isConnected ? (
+                  <div style={{ fontSize: 12, opacity: 0.85, color: ink }}>
+                    {allowLoading ? (
+                      "Checking coins…"
+                    ) : (
+                      <>
+                        {usdcBal !== null ? `Your coins: ${fmtUsdc(usdcBal.toString())} USDC • ` : ""}
+                        {allowance !== null ? `Allowed: ${fmtUsdc(allowance.toString())} USDC` : ""}
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, opacity: 0.85, color: ink }}>Please sign in to join.</div>
+                )}
+
+                <button style={needsAllow ? btnEnabled : btnDisabled} disabled={!needsAllow} onClick={onAllow}>
+                  {isPending ? "Confirming…" : isConnected ? "Allow coins (USDC)" : "Sign in to allow"}
+                </button>
+
+                <button style={canBuy ? btnEnabled : btnDisabled} disabled={!canBuy} onClick={onBuy}>
+                  {isPending ? "Confirming…" : isConnected ? "Buy tickets" : "Sign in to join"}
+                </button>
+
+                {!hasEnoughBalance && (
+                  <div style={{ fontSize: 13, opacity: 0.95, color: inkStrong }}>Not enough USDC for this purchase.</div>
+                )}
+
+                <div style={{ fontSize: 12, opacity: 0.9, color: ink }}>
+                  Nothing happens automatically. You always confirm actions yourself.
+                </div>
+
+                {buyMsg && <div style={{ fontSize: 13, opacity: 0.95, color: inkStrong }}>{buyMsg}</div>}
+              </>
             )}
-
-            <button style={needsAllow ? btnEnabled : btnDisabled} disabled={!needsAllow} onClick={onAllow}>
-              {isPending ? "Confirming…" : isConnected ? "Allow coins (USDC)" : "Sign in to allow"}
-            </button>
-
-            <button style={canBuy ? btnEnabled : btnDisabled} disabled={!canBuy} onClick={onBuy}>
-              {isPending ? "Confirming…" : isConnected ? "Buy tickets" : "Sign in to join"}
-            </button>
-
-            {!hasEnoughBalance && (
-              <div style={{ fontSize: 13, opacity: 0.95, color: inkStrong }}>Not enough USDC for this purchase.</div>
-            )}
-
-            <div style={{ fontSize: 12, opacity: 0.9, color: ink }}>
-              Nothing happens automatically. You always confirm actions yourself.
-            </div>
-
-            {buyMsg && <div style={{ fontSize: 13, opacity: 0.95, color: inkStrong }}>{buyMsg}</div>}
           </div>
         </div>
 
