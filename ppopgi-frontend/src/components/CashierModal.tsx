@@ -7,7 +7,7 @@ import { thirdwebClient } from "../thirdweb/client";
 import { ETHERLINK_CHAIN } from "../thirdweb/etherlink";
 import { getWalletBalance } from "thirdweb/wallets";
 
-// Etherlink USDC (from your config / memory)
+// Etherlink USDC
 const USDC_ADDRESS = "0x796Ea11Fa2dD751eD01b53C372fFDB4AAa8f00F9";
 
 type Props = {
@@ -23,6 +23,11 @@ function fmt(raw: bigint, decimals: number) {
   }
 }
 
+function short(a: string) {
+  if (!a) return "—";
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
 export function CashierModal({ open, onClose }: Props) {
   const activeAccount = useActiveAccount();
   const me = activeAccount?.address ?? null;
@@ -31,68 +36,6 @@ export function CashierModal({ open, onClose }: Props) {
   const [usdc, setUsdc] = useState<bigint | null>(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-
-  const overlay: React.CSSProperties = useMemo(
-    () => ({
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.35)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 16,
-      zIndex: 12000,
-    }),
-    []
-  );
-
-  const card: React.CSSProperties = useMemo(
-    () => ({
-      width: "min(720px, 100%)",
-      maxHeight: "min(78vh, 900px)",
-      overflow: "auto",
-      borderRadius: 18,
-      border: "1px solid rgba(255,255,255,0.35)",
-      background: "rgba(255,255,255,0.22)",
-      backdropFilter: "blur(14px)",
-      WebkitBackdropFilter: "blur(14px)",
-      boxShadow: "0 12px 40px rgba(0,0,0,0.18)",
-      padding: 18,
-      color: "#2B2B33",
-    }),
-    []
-  );
-
-  const pill: React.CSSProperties = {
-    border: "1px solid rgba(0,0,0,0.15)",
-    background: "rgba(255,255,255,0.65)",
-    borderRadius: 999,
-    padding: "6px 10px",
-    cursor: "pointer",
-    color: "#2B2B33",
-    fontWeight: 800,
-    fontSize: 12,
-  };
-
-  const section: React.CSSProperties = {
-    marginTop: 14,
-    padding: 12,
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.35)",
-    background: "rgba(255,255,255,0.18)",
-  };
-
-  const row: React.CSSProperties = {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 12,
-    fontSize: 13,
-    lineHeight: 1.35,
-    marginTop: 8,
-  };
-
-  const label: React.CSSProperties = { opacity: 0.85 };
-  const value: React.CSSProperties = { fontWeight: 900 };
 
   const usdcContract = useMemo(() => {
     return getContract({
@@ -128,10 +71,9 @@ export function CashierModal({ open, onClose }: Props) {
         params: [me],
       });
 
-      // thirdweb returns bigint-like; cast defensively
       setXtz(BigInt((b as any).value ?? 0n));
       setUsdc(BigInt(u as any));
-    } catch (e: any) {
+    } catch {
       setXtz(null);
       setUsdc(null);
       setNote("Could not load balances right now. Please try again.");
@@ -147,65 +89,293 @@ export function CashierModal({ open, onClose }: Props) {
 
   if (!open) return null;
 
+  // ----------------- STYLE (Ppopgi glass) -----------------
+  const ink = "#4A0F2B";
+
+  const overlay: React.CSSProperties = {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.40)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    zIndex: 10500,
+  };
+
+  const modal: React.CSSProperties = {
+    width: "min(860px, 100%)",
+    maxHeight: "min(88vh, 900px)",
+    overflow: "hidden",
+    borderRadius: 22,
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.70), rgba(255,255,255,0.40))," +
+      "radial-gradient(900px 260px at 15% 0%, rgba(255,141,187,0.18), rgba(255,141,187,0) 55%)," +
+      "radial-gradient(900px 260px at 85% 0%, rgba(203,183,246,0.18), rgba(203,183,246,0) 55%)",
+    border: "1px solid rgba(255,255,255,0.70)",
+    boxShadow: "0 22px 70px rgba(0,0,0,0.28)",
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
+    color: ink,
+  };
+
+  const header: React.CSSProperties = {
+    padding: 16,
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    borderBottom: "1px solid rgba(0,0,0,0.06)",
+  };
+
+  const title: React.CSSProperties = {
+    margin: 0,
+    fontSize: 18,
+    fontWeight: 1000,
+    letterSpacing: 0.2,
+  };
+
+  const subtitle: React.CSSProperties = {
+    marginTop: 6,
+    fontSize: 13,
+    opacity: 0.82,
+    lineHeight: 1.4,
+  };
+
+  const body: React.CSSProperties = {
+    padding: 14,
+    overflow: "auto",
+    maxHeight: "calc(min(88vh, 900px) - 72px)",
+    display: "grid",
+    gap: 12,
+  };
+
+  const panel: React.CSSProperties = {
+    borderRadius: 18,
+    padding: 14,
+    background: "rgba(255,255,255,0.62)",
+    border: "1px solid rgba(0,0,0,0.06)",
+    boxShadow: "0 10px 22px rgba(0,0,0,0.08)",
+  };
+
+  const rowBetween: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+  };
+
+  const chip: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    padding: "7px 10px",
+    border: "1px solid rgba(0,0,0,0.10)",
+    background: "rgba(255,255,255,0.72)",
+    fontSize: 12,
+    fontWeight: 950,
+    whiteSpace: "nowrap",
+    color: ink,
+  };
+
+  const btnBase: React.CSSProperties = {
+    borderRadius: 14,
+    padding: "10px 12px",
+    fontWeight: 1000,
+    cursor: "pointer",
+    border: "1px solid rgba(0,0,0,0.10)",
+    whiteSpace: "nowrap",
+  };
+
+  const btnPrimary: React.CSSProperties = {
+    ...btnBase,
+    background: "rgba(25,25,35,0.92)",
+    color: "white",
+  };
+
+  const btnSecondary: React.CSSProperties = {
+    ...btnBase,
+    background: "rgba(255,255,255,0.86)",
+    color: ink,
+  };
+
+  const btnDisabled: React.CSSProperties = {
+    ...btnBase,
+    background: "rgba(240,240,242,1)",
+    color: "rgba(20,20,28,0.45)",
+    cursor: "not-allowed",
+  };
+
+  const bigAmount: React.CSSProperties = {
+    marginTop: 6,
+    fontSize: 26,
+    fontWeight: 1100 as any,
+    letterSpacing: 0.2,
+    color: ink,
+    lineHeight: 1.05,
+  };
+
+  const smallLabel: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 950,
+    opacity: 0.85,
+  };
+
+  const hint: React.CSSProperties = {
+    marginTop: 10,
+    fontSize: 12,
+    opacity: 0.82,
+    lineHeight: 1.35,
+  };
+
+  const noteBox: React.CSSProperties = {
+    borderRadius: 16,
+    padding: 12,
+    background: "rgba(255,255,255,0.80)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    fontSize: 13,
+    fontWeight: 900,
+    boxShadow: "0 14px 26px rgba(0,0,0,0.10)",
+  };
+
+  const xtzText = xtz === null ? "—" : `${fmt(xtz, 18)} XTZ`;
+  const usdcText = usdc === null ? "—" : `${fmt(usdc, 6)} USDC`;
+
   return (
     <div style={overlay} onMouseDown={onClose}>
-      <div style={card} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+      <div style={modal} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        {/* Header */}
+        <div style={header}>
           <div>
-            <div style={{ fontSize: 12, opacity: 0.85 }}>Cashier</div>
-            <div style={{ fontSize: 18, fontWeight: 900 }}>Balances & getting started</div>
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-              This is read-only. It shows your balances on Etherlink.
+            <div style={{ ...smallLabel, opacity: 0.75 }}>Cashier</div>
+            <h3 style={title}>Balances & getting started</h3>
+            <div style={subtitle}>
+              Read-only view of your balances on Etherlink. You always confirm actions in your wallet.
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8 }}>
-            <button style={pill} onClick={refresh} disabled={loading}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={chip} title={me || ""}>
+              <span style={{ opacity: 0.85 }}>Account</span>
+              <b style={{ letterSpacing: 0.2 }}>{me ? short(me) : "Not signed in"}</b>
+            </span>
+
+            <button style={!loading ? btnPrimary : btnDisabled} onClick={refresh} disabled={loading}>
               {loading ? "Refreshing…" : "Refresh"}
             </button>
-            <button style={pill} onClick={onClose}>
+
+            <button style={btnSecondary} onClick={onClose}>
               Close
             </button>
           </div>
         </div>
 
-        {note && <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>{note}</div>}
+        <div style={body}>
+          {note && <div style={noteBox}>{note}</div>}
 
-        <div style={section}>
-          <div style={{ fontWeight: 900 }}>Your balances (Etherlink)</div>
+          {/* Balance summary */}
+          <div style={panel}>
+            <div style={rowBetween}>
+              <div style={{ fontWeight: 1100 as any, letterSpacing: 0.2 }}>Your balances</div>
+              <span style={chip}>{loading ? "Syncing…" : "Up to date"}</span>
+            </div>
 
-          <div style={row}>
-            <div style={label}>XTZ (gas)</div>
-            <div style={value}>{xtz === null ? "—" : `${fmt(xtz, 18)} XTZ`}</div>
+            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: 12,
+                  background: "rgba(255,255,255,0.62)",
+                  border: "1px solid rgba(0,0,0,0.06)",
+                }}
+              >
+                <div style={smallLabel}>XTZ (gas)</div>
+                <div style={bigAmount}>{xtzText}</div>
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.78 }}>
+                  Needed for gas even if you only use USDC.
+                </div>
+              </div>
+
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: 12,
+                  background: "rgba(255,255,255,0.62)",
+                  border: "1px solid rgba(0,0,0,0.06)",
+                }}
+              >
+                <div style={smallLabel}>USDC</div>
+                <div style={bigAmount}>{usdcText}</div>
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.78 }}>
+                  Used to buy tickets and fund prizes.
+                </div>
+              </div>
+            </div>
+
+            <div style={hint}>
+              If you see “—”, sign in and make sure your wallet is connected to Etherlink.
+            </div>
           </div>
 
-          <div style={row}>
-            <div style={label}>USDC</div>
-            <div style={value}>{usdc === null ? "—" : `${fmt(usdc, 6)} USDC`}</div>
-          </div>
+          {/* Getting started */}
+          <div style={panel}>
+            <div style={{ fontWeight: 1100 as any, letterSpacing: 0.2 }}>Getting started</div>
 
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
-            You need a small amount of XTZ for gas even if you only use USDC.
-          </div>
-        </div>
+            <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: 12,
+                  background: "rgba(255,255,255,0.62)",
+                  border: "1px solid rgba(0,0,0,0.06)",
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontWeight: 1000 }}>1) Get a little XTZ</div>
+                <div style={{ fontSize: 13, opacity: 0.88, lineHeight: 1.45 }}>
+                  You’ll need XTZ for gas to create raffles and buy tickets.
+                </div>
+              </div>
 
-        <div style={section}>
-          <div style={{ fontWeight: 900 }}>How to get started</div>
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: 12,
+                  background: "rgba(255,255,255,0.62)",
+                  border: "1px solid rgba(0,0,0,0.06)",
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontWeight: 1000 }}>2) Move funds to Etherlink</div>
+                <div style={{ fontSize: 13, opacity: 0.88, lineHeight: 1.45 }}>
+                  Bridge or use a supported route that lands on Etherlink.
+                </div>
+              </div>
 
-          <ol style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 13, lineHeight: 1.5, opacity: 0.9 }}>
-            <li>
-              Get a little <b>XTZ</b> (for gas).
-            </li>
-            <li>
-              Move funds to <b>Etherlink</b> (bridge or supported exchange route).
-            </li>
-            <li>
-              Get <b>USDC on Etherlink</b> (bridge or swap), then come back and join raffles.
-            </li>
-          </ol>
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: 12,
+                  background: "rgba(255,255,255,0.62)",
+                  border: "1px solid rgba(0,0,0,0.06)",
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontWeight: 1000 }}>3) Get USDC on Etherlink</div>
+                <div style={{ fontSize: 13, opacity: 0.88, lineHeight: 1.45 }}>
+                  Bridge or swap to USDC on Etherlink, then come back and join raffles.
+                </div>
+              </div>
+            </div>
 
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
-            Tip: if you see “—” above, sign in (wallet connect) and make sure you’re on Etherlink.
+            <div style={hint}>
+              This modal is purely informational — it never triggers transactions.
+            </div>
           </div>
         </div>
       </div>
