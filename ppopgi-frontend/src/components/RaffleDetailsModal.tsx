@@ -90,7 +90,14 @@ function normalizeCancelReason(reason?: string | null) {
   return reason?.trim() ? reason.trim() : "Canceled";
 }
 
-type DisplayStatus = "Open" | "Finalizing" | "Drawing" | "Settled" | "Canceled" | "Getting ready" | "Unknown";
+type DisplayStatus =
+  | "Open"
+  | "Finalizing"
+  | "Drawing"
+  | "Settled"
+  | "Canceled"
+  | "Getting ready"
+  | "Unknown";
 
 function baseStatusLabel(s: string) {
   if (s === "FUNDING_PENDING") return "Getting ready";
@@ -316,8 +323,6 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
     refreshAllowance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, activeAccount?.address, raffleId, data?.usdcToken]);
-
-  if (!open) return null;
 
   const hasEnoughAllowance = allowance !== null ? allowance >= totalCostU : false;
   const hasEnoughBalance = usdcBal !== null ? usdcBal >= totalCostU : true;
@@ -689,6 +694,9 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
 
   const canShowWinner = data?.status === "COMPLETED";
 
+  // ✅ IMPORTANT: only return null AFTER all hooks have run (prevents hook order crash)
+  if (!open) return null;
+
   return (
     <div style={overlay} onMouseDown={onClose}>
       <div style={card} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -996,7 +1004,10 @@ export function RaffleDetailsModal({ open, raffleId, onClose }: Props) {
             {displayStatus === "Open" || displayStatus === "Getting ready" ? (
               `Ends in ${bottomLine}`
             ) : (
-              <span className={pulseBottom ? "pp-rc-pulse" : undefined} style={pulseBottom ? { color: "#0B2E5C" } : undefined}>
+              <span
+                className={pulseBottom ? "pp-rc-pulse" : undefined}
+                style={pulseBottom ? { color: "#0B2E5C" } : undefined}
+              >
                 {bottomLine}
               </span>
             )}
