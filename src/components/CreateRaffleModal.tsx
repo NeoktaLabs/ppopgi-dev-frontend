@@ -575,7 +575,7 @@ export function CreateRaffleModal({ open, onClose, onCreated }: Props) {
       maxTickets: String(maxT),
       minTickets: String(minT),
       protocolFeePercent: String(data?.protocolFeePercent ?? "0"),
-      feeRecipient: String(data?.feeRecipient ?? ADDRESSES.FeeRecipient ?? "0x0000000000000000000000000000000000000000"),
+      feeRecipient: String(data?.feeRecipient || "0x0000000000000000000000000000000000000000"),
       deployer: ADDRESSES.SingleWinnerDeployer,
       creator: me ?? "0x0000000000000000000000000000000000000000",
       lastUpdatedTimestamp: String(now),
