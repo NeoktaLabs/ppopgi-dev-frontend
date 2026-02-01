@@ -24,10 +24,6 @@ function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
-function normAddr(a: string) {
-  return (a || "").trim().toLowerCase();
-}
-
 type DurationUnit = "minutes" | "hours" | "days";
 function unitToSeconds(unit: DurationUnit): number {
   if (unit === "minutes") return 60;
